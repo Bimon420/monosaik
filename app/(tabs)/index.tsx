@@ -1,0 +1,367 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator } from 'react-native';
+import { Container, Button } from '@/components/ui';
+import { colors, spacing, typography, shadows } from '@/constants/design';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { safeDbCreate, safeDbList, safeDbUpdate, safeDbUpdateUserPixels, safeDbGet } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { THEME_MOODS } from '@/lib/themes';
+import { useI18n } from '@/lib/i18n';
+import { useDiscoStore } from '@/lib/store';
+
+const MOOD_COLORS = [
+  { color: '#FFD700', name: 'Freudig' },
+  { color: '#40E0D0', name: 'Ruhig' },
+  { color: '#FF4500', name: 'Energetisch' },
+  { color: '#4169E1', name: 'Traurig' },
+  { color: '#8A2BE2', name: 'Kreativ' },
+  { color: '#FF1493', name: 'Aufgeregt' },
+  { color: '#ADFF2F', name: 'Frisch' },
+  { color: '#708090', name: 'Neutral' },
+  { color: '#FF8C00', name: 'Mutig' },
+  { color: '#00CED1', name: 'Friedlich' },
+  { color: '#8B4513', name: 'Geerdet' },
+  { color: '#000000', name: 'Geheimnisvoll' },
+];
+
+const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+
+export default function DailyMoodScreen() {
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [rewardEarned, setRewardEarned] = useState(false);
+  const [discoTick, setDiscoTick] = useState(0);
+  const queryClient = useQueryClient();
+  const { t } = useI18n();
+  const { isDiscoEnabled, toggleDisco } = useDiscoStore();
+  const today = new Date().toISOString().split('T')[0];
+
+  // Disco animation using simple interval instead of broken reanimated hooks
+  useEffect(() => {
+    if (!isDiscoEnabled) return;
+    const interval = setInterval(() => {
+      setDiscoTick(prev => (prev + 1) % DISCO_COLORS.length);
+    }, 300);
+    return () => clearInterval(interval);
+  }, [isDiscoEnabled]);
+
+  const getDiscoColor = useCallback((index: number) => {
+    if (!isDiscoEnabled) return undefined;
+    return DISCO_COLORS[(discoTick + index) % DISCO_COLORS.length];
+  }, [isDiscoEnabled, discoTick]);
+
+  const { data: todayMood, isLoading: isLoadingToday } = useQuery({
+    queryKey: ['moods', 'today'],
+    queryFn: async () => {
+      const results = await safeDbList('moods', {
+        where: { userId: 'current_user', date: today },
+        limit: 1
+      });
+      return results[0] || null;
+    }
+  });
+
+  const { data: userData } = useQuery({
+    queryKey: ['users', 'current_user'],
+    queryFn: () => safeDbGet('users', 'current_user'),
+  });
+
+  const activeTheme = userData?.themeIcon || 'classic';
+  const themeIcons = THEME_MOODS[activeTheme] || THEME_MOODS.classic;
+
+  useEffect(() => {
+    if (todayMood && !selectedMood && !submitted) {
+      setSelectedMood(todayMood.color);
+    }
+  }, [todayMood]);
+
+  const mutation = useMutation({
+    mutationFn: async (mood: { color: string; name: string }) => {
+      let result;
+      const isFirstTime = !todayMood;
+
+      if (todayMood) {
+        result = await safeDbUpdate('moods', todayMood.id, {
+          color: mood.color,
+          moodName: mood.name,
+        });
+      } else {
+        result = await safeDbCreate('moods', {
+          color: mood.color,
+          moodName: mood.name,
+          date: today,
+          userId: 'current_user',
+        });
+        await safeDbUpdateUserPixels('current_user', 10);
+      }
+
+      if (!result) throw new Error('Failed to save mood');
+      return { result, isFirstTime };
+    },
+    onSuccess: (data) => {
+      setRewardEarned(data.isFirstTime);
+      setSubmitted(true);
+      queryClient.invalidateQueries({ queryKey: ['moods'] });
+      queryClient.invalidateQueries({ queryKey: ['users', 'current_user'] });
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    },
+  });
+
+  const handleMoodSelect = (mood: typeof MOOD_COLORS[0]) => {
+    setSelectedMood(mood.color);
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (selectedMood) {
+      const mood = MOOD_COLORS.find(m => m.color === selectedMood);
+      if (mood) mutation.mutate(mood);
+    }
+  };
+
+  if (isLoadingToday) {
+    return (
+      <Container safeArea edges={['top']} style={styles.container}>
+        <View style={styles.successContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </Container>
+    );
+  }
+
+  if (submitted) {
+    const mood = MOOD_COLORS.find(m => m.color === selectedMood);
+    const moodIndex = MOOD_COLORS.findIndex(m => m.color === selectedMood);
+    const iconName = themeIcons[moodIndex]?.icon || 'checkmark';
+    const circleColor = isDiscoEnabled ? getDiscoColor(0) : (selectedMood || colors.primary);
+
+    return (
+      <Container safeArea edges={['top']} style={styles.container}>
+        <View style={styles.header}>
+          <Pressable
+            onPress={toggleDisco}
+            style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive, { alignSelf: 'flex-end', marginRight: spacing.lg }]}
+          >
+            <Ionicons
+              name={isDiscoEnabled ? "musical-notes" : "disc-outline"}
+              size={24}
+              color={isDiscoEnabled ? "#FFF" : colors.primary}
+            />
+          </Pressable>
+        </View>
+        <View style={styles.successContainer}>
+          <Animated.View
+            entering={FadeInDown.duration(600)}
+            style={[styles.successCircle, { backgroundColor: circleColor }]}
+          >
+            <Ionicons name={iconName as any} size={48} color={selectedMood === '#000000' || selectedMood === '#4169E1' || isDiscoEnabled ? '#FFF' : '#000'} />
+          </Animated.View>
+          <Animated.Text entering={FadeInDown.delay(200).duration(500)} style={styles.successTitle}>
+            {rewardEarned ? t('daily_success_title') : t('daily_update_title')}
+          </Animated.Text>
+          <Animated.Text entering={FadeInDown.delay(300).duration(500)} style={styles.successSubtitle}>
+            {mood?.name} {rewardEarned ? `— ${t('daily_reward')}` : `— ${t('daily_no_reward')}`}
+          </Animated.Text>
+          <Animated.View entering={FadeInUp.delay(500)}>
+            <Button variant="outline" onPress={() => { setSubmitted(false); }}>
+              {t('daily_back')}
+            </Button>
+          </Animated.View>
+        </View>
+      </Container>
+    );
+  }
+
+  return (
+    <Container safeArea edges={['top']} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.titleRow}>
+          <Animated.View entering={FadeInDown.duration(600)}>
+            <Text style={styles.title}>{t('daily_title')}</Text>
+            <Text style={styles.subtitle}>{t('daily_subtitle')}</Text>
+          </Animated.View>
+          <Pressable
+            onPress={toggleDisco}
+            style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}
+          >
+            <Ionicons
+              name={isDiscoEnabled ? "musical-notes" : "disc-outline"}
+              size={24}
+              color={isDiscoEnabled ? "#FFF" : colors.primary}
+            />
+          </Pressable>
+        </View>
+
+        <View style={styles.grid}>
+          {MOOD_COLORS.map((mood, index) => {
+            const discoColor = getDiscoColor(index);
+            return (
+              <Animated.View
+                key={mood.color}
+                entering={FadeInDown.delay(index * 50).duration(500)}
+                style={styles.moodItem}
+              >
+                <Pressable onPress={() => handleMoodSelect(mood)}>
+                  <View style={[
+                    styles.colorCircle,
+                    { backgroundColor: discoColor || mood.color },
+                    selectedMood === mood.color && styles.selectedCircle,
+                    isDiscoEnabled && { transform: [{ scale: index % 2 === 0 ? 1.1 : 0.95 }] }
+                  ]}>
+                    <Ionicons
+                      name={themeIcons[index]?.icon as any || 'help'}
+                      size={32}
+                      color={selectedMood === mood.color || isDiscoEnabled ? (mood.color === '#000000' || mood.color === '#4169E1' ? '#FFF' : '#000') : 'rgba(255,255,255,0.4)'}
+                    />
+                  </View>
+                </Pressable>
+                <Text style={styles.moodName}>{mood.name}</Text>
+              </Animated.View>
+            );
+          })}
+        </View>
+
+        <Animated.View entering={FadeInUp} style={styles.footer}>
+          <Button
+            variant={todayMood ? "outline" : "primary"}
+            size="lg"
+            onPress={handleSubmit}
+            loading={mutation.isPending}
+            style={styles.submitButton}
+            disabled={todayMood?.color === selectedMood}
+          >
+            {todayMood
+              ? (todayMood.color === selectedMood ? t('daily_logged') : t('daily_update'))
+              : t('daily_submit')
+            }
+          </Button>
+          {mutation.isError && (
+            <Text style={styles.errorText}>Fehler beim Speichern — Versuche es später erneut.</Text>
+          )}
+        </Animated.View>
+      </ScrollView>
+    </Container>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: colors.background,
+    flex: 1,
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  discoButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  discoButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  title: {
+    ...typography.display,
+    color: colors.text,
+    fontSize: 32,
+    marginBottom: spacing.xs,
+  },
+  subtitle: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginBottom: spacing.xl,
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  moodItem: {
+    width: '30%',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  colorCircle: {
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.md,
+  },
+  selectedCircle: {
+    borderWidth: 4,
+    borderColor: '#FFF',
+    transform: [{ scale: 1.05 }],
+  },
+  moodName: {
+    ...typography.caption,
+    color: colors.text,
+    marginTop: 6,
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  footer: {
+    marginTop: spacing.xxl,
+  },
+  submitButton: {
+    width: '100%',
+    height: 60,
+  },
+  errorText: {
+    ...typography.caption,
+    color: '#FF4500',
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  successContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingTop: spacing.md,
+    paddingRight: spacing.md,
+  },
+  successCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  successTitle: {
+    ...typography.h1,
+    color: colors.text,
+  },
+  successSubtitle: {
+    ...typography.body,
+    color: colors.textMuted,
+    marginBottom: spacing.xl,
+  },
+});
