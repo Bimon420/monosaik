@@ -27,6 +27,8 @@ const MOOD_COLORS = [
 ];
 
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+const ITEM_SIZE = 80;
+const CIRCLE_SIZE = 62;
 
 export default function DailyMoodScreen() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
@@ -38,7 +40,6 @@ export default function DailyMoodScreen() {
   const { isDiscoEnabled, toggleDisco } = useDiscoStore();
   const today = new Date().toISOString().split('T')[0];
 
-  // Disco animation using simple interval instead of broken reanimated hooks
   useEffect(() => {
     if (!isDiscoEnabled) return;
     const interval = setInterval(() => {
@@ -81,22 +82,12 @@ export default function DailyMoodScreen() {
     mutationFn: async (mood: { color: string; name: string }) => {
       let result;
       const isFirstTime = !todayMood;
-
       if (todayMood) {
-        result = await safeDbUpdate('moods', todayMood.id, {
-          color: mood.color,
-          moodName: mood.name,
-        });
+        result = await safeDbUpdate('moods', todayMood.id, { color: mood.color, moodName: mood.name });
       } else {
-        result = await safeDbCreate('moods', {
-          color: mood.color,
-          moodName: mood.name,
-          date: today,
-          userId: 'current_user',
-        });
+        result = await safeDbCreate('moods', { color: mood.color, moodName: mood.name, date: today, userId: 'current_user' });
         await safeDbUpdateUserPixels('current_user', 10);
       }
-
       if (!result) throw new Error('Failed to save mood');
       return { result, isFirstTime };
     },
@@ -128,7 +119,7 @@ export default function DailyMoodScreen() {
   if (isLoadingToday) {
     return (
       <Container safeArea edges={['top']} style={styles.container}>
-        <View style={styles.successContainer}>
+        <View style={styles.centerContent}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       </Container>
@@ -140,27 +131,16 @@ export default function DailyMoodScreen() {
     const moodIndex = MOOD_COLORS.findIndex(m => m.color === selectedMood);
     const iconName = themeIcons[moodIndex]?.icon || 'checkmark';
     const circleColor = isDiscoEnabled ? getDiscoColor(0) : (selectedMood || colors.primary);
-
     return (
       <Container safeArea edges={['top']} style={styles.container}>
-        <View style={styles.header}>
-          <Pressable
-            onPress={toggleDisco}
-            style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive, { alignSelf: 'flex-end', marginRight: spacing.lg }]}
-          >
-            <Ionicons
-              name={isDiscoEnabled ? "musical-notes" : "disc-outline"}
-              size={24}
-              color={isDiscoEnabled ? "#FFF" : colors.primary}
-            />
+        <View style={styles.discoRow}>
+          <Pressable onPress={toggleDisco} style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}>
+            <Ionicons name={isDiscoEnabled ? "musical-notes" : "disc-outline"} size={22} color={isDiscoEnabled ? "#FFF" : colors.primary} />
           </Pressable>
         </View>
-        <View style={styles.successContainer}>
-          <Animated.View
-            entering={FadeInDown.duration(600)}
-            style={[styles.successCircle, { backgroundColor: circleColor }]}
-          >
-            <Ionicons name={iconName as any} size={48} color={selectedMood === '#000000' || selectedMood === '#4169E1' || isDiscoEnabled ? '#FFF' : '#000'} />
+        <View style={styles.centerContent}>
+          <Animated.View entering={FadeInDown.duration(600)} style={[styles.successCircle, { backgroundColor: circleColor }]}>
+            <Ionicons name={iconName as any} size={44} color={selectedMood === '#000000' || selectedMood === '#4169E1' || isDiscoEnabled ? '#FFF' : '#000'} />
           </Animated.View>
           <Animated.Text entering={FadeInDown.delay(200).duration(500)} style={styles.successTitle}>
             {rewardEarned ? t('daily_success_title') : t('daily_update_title')}
@@ -180,54 +160,48 @@ export default function DailyMoodScreen() {
 
   return (
     <Container safeArea edges={['top']} style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.titleRow}>
-          <Animated.View entering={FadeInDown.duration(600)}>
+          <Animated.View entering={FadeInDown.duration(500)} style={styles.titleBlock}>
             <Text style={styles.title}>{t('daily_title')}</Text>
             <Text style={styles.subtitle}>{t('daily_subtitle')}</Text>
           </Animated.View>
-          <Pressable
-            onPress={toggleDisco}
-            style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}
-          >
-            <Ionicons
-              name={isDiscoEnabled ? "musical-notes" : "disc-outline"}
-              size={24}
-              color={isDiscoEnabled ? "#FFF" : colors.primary}
-            />
+          <Pressable onPress={toggleDisco} style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}>
+            <Ionicons name={isDiscoEnabled ? "musical-notes" : "disc-outline"} size={22} color={isDiscoEnabled ? "#FFF" : colors.primary} />
           </Pressable>
         </View>
 
-        <View style={styles.grid}>
-          {MOOD_COLORS.map((mood, index) => {
-            const discoColor = getDiscoColor(index);
-            return (
-              <Animated.View
-                key={mood.color}
-                entering={FadeInDown.delay(index * 50).duration(500)}
-                style={styles.moodItem}
-              >
-                <Pressable onPress={() => handleMoodSelect(mood)}>
-                  <View style={[
-                    styles.colorCircle,
-                    { backgroundColor: discoColor || mood.color },
-                    selectedMood === mood.color && styles.selectedCircle,
-                    isDiscoEnabled && { transform: [{ scale: index % 2 === 0 ? 1.1 : 0.95 }] }
-                  ]}>
-                    <Ionicons
-                      name={themeIcons[index]?.icon as any || 'help'}
-                      size={32}
-                      color={selectedMood === mood.color || isDiscoEnabled ? (mood.color === '#000000' || mood.color === '#4169E1' ? '#FFF' : '#000') : 'rgba(255,255,255,0.4)'}
-                    />
-                  </View>
-                </Pressable>
-                <Text style={styles.moodName}>{mood.name}</Text>
-              </Animated.View>
-            );
-          })}
+        <View style={styles.gridContainer}>
+          <View style={styles.grid}>
+            {MOOD_COLORS.map((mood, index) => {
+              const discoColor = getDiscoColor(index);
+              return (
+                <View key={mood.color} style={styles.moodItem}>
+                  <Pressable onPress={() => handleMoodSelect(mood)}>
+                    <View style={[
+                      styles.colorCircle,
+                      { backgroundColor: discoColor || mood.color },
+                      selectedMood === mood.color && styles.selectedCircle,
+                      isDiscoEnabled && { transform: [{ scale: index % 2 === 0 ? 1.08 : 0.95 }] }
+                    ]}>
+                      <Ionicons
+                        name={themeIcons[index]?.icon as any || 'help'}
+                        size={24}
+                        color={selectedMood === mood.color || isDiscoEnabled ? (mood.color === '#000000' || mood.color === '#4169E1' ? '#FFF' : '#000') : 'rgba(255,255,255,0.4)'}
+                      />
+                    </View>
+                  </Pressable>
+                  <Text style={styles.moodName}>{mood.name}</Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
 
-        <Animated.View entering={FadeInUp} style={styles.footer}>
+        <Animated.View entering={FadeInUp.delay(200)} style={styles.footer}>
           <Button
             variant={todayMood ? "outline" : "primary"}
             size="lg"
@@ -256,19 +230,30 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
+    flexGrow: 1,
   },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.md,
   },
+  titleBlock: {
+    flex: 1,
+  },
+  discoRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+  },
   discoButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
@@ -280,77 +265,78 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   title: {
-    ...typography.display,
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: '700',
     color: colors.text,
-    fontSize: 32,
-    marginBottom: spacing.xs,
+    letterSpacing: -0.5,
+    marginBottom: 2,
   },
   subtitle: {
-    ...typography.body,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textMuted,
-    marginBottom: spacing.xl,
+  },
+  gridContainer: {
+    alignItems: 'center',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    gap: spacing.md,
+    justifyContent: 'center',
+    gap: spacing.xs,
+    maxWidth: 380,
   },
   moodItem: {
-    width: '30%',
+    width: ITEM_SIZE,
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   colorCircle: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
+    width: CIRCLE_SIZE,
+    height: CIRCLE_SIZE,
+    borderRadius: CIRCLE_SIZE / 2,
     justifyContent: 'center',
     alignItems: 'center',
     ...shadows.md,
   },
   selectedCircle: {
-    borderWidth: 4,
+    borderWidth: 3,
     borderColor: '#FFF',
-    transform: [{ scale: 1.05 }],
+    transform: [{ scale: 1.06 }],
   },
   moodName: {
-    ...typography.caption,
     color: colors.text,
-    marginTop: 6,
+    marginTop: 4,
     fontWeight: '600',
-    fontSize: 11,
+    fontSize: 10,
+    lineHeight: 13,
+    textAlign: 'center',
   },
   footer: {
-    marginTop: spacing.xxl,
+    marginTop: spacing.md,
   },
   submitButton: {
     width: '100%',
-    height: 60,
+    height: 54,
   },
   errorText: {
-    ...typography.caption,
+    fontSize: 12,
     color: '#FF4500',
     textAlign: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
-  successContainer: {
+  centerContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,
     gap: spacing.md,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingTop: spacing.md,
-    paddingRight: spacing.md,
-  },
   successCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
@@ -363,5 +349,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textMuted,
     marginBottom: spacing.xl,
+    textAlign: 'center',
   },
 });

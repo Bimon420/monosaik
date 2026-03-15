@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { Svg, Rect } from 'react-native-svg';
 import { colors, spacing, typography, borderRadius } from '@/constants/design';
 import { safeDbUpsertPixel, safeDbGetGlobalMosaic, safeDbUpdateUserPixels, safeDbGet } from '@/lib/api';
@@ -11,10 +11,6 @@ import { useI18n } from '@/lib/i18n';
 import { useDiscoStore } from '@/lib/store';
 
 const CANVAS_SIZE = 64;
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const CANVAS_PADDING = spacing.sm * 2;
-const PIXEL_SIZE = (SCREEN_WIDTH - CANVAS_PADDING) / CANVAS_SIZE;
-const TOTAL_WIDTH = CANVAS_SIZE * PIXEL_SIZE;
 
 const PALETTE_SCHEMES = {
   vibrant: [
@@ -37,6 +33,11 @@ const PALETTE_SCHEMES = {
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
 
 export function CollaborativeMosaic() {
+  const { width: screenWidth } = useWindowDimensions();
+  const canvasPadding = spacing.md * 2;
+  const pixelSize = Math.max(1, (screenWidth - canvasPadding) / CANVAS_SIZE);
+  const totalWidth = CANVAS_SIZE * pixelSize;
+
   const [pixels, setPixels] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [scheme, setScheme] = useState<keyof typeof PALETTE_SCHEMES>('vibrant');
@@ -49,7 +50,6 @@ export function CollaborativeMosaic() {
   const { t } = useI18n();
   const { isDiscoEnabled } = useDiscoStore();
 
-  // Disco animation using simple interval
   useEffect(() => {
     if (!isDiscoEnabled) return;
     const interval = setInterval(() => {
@@ -64,7 +64,6 @@ export function CollaborativeMosaic() {
     return DISCO_COLORS[(discoTick + offset) % DISCO_COLORS.length];
   }, [isDiscoEnabled, discoTick]);
 
-  // Fetch initial mosaic state and user pixels
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -72,7 +71,9 @@ export function CollaborativeMosaic() {
         const mosaicRes = await safeDbGetGlobalMosaic();
         const pixelMap: Record<string, string> = {};
         mosaicRes.forEach((p: any) => {
-          pixelMap[`${p.x}_${p.y}`] = p.color;
+          if (typeof p.x === 'number' && typeof p.y === 'number') {
+            pixelMap[`${p.x}_${p.y}`] = p.color;
+          }
         });
         setPixels(pixelMap);
       } catch (err) {
@@ -82,7 +83,7 @@ export function CollaborativeMosaic() {
       try {
         const userRes = await safeDbGet('users', 'current_user');
         setUserPixels((userRes as any)?.pixelBalance || 50);
-      } catch (err) {
+      } catch {
         setUserPixels(50);
       }
       setLoading(false);
@@ -90,22 +91,18 @@ export function CollaborativeMosaic() {
 
     fetchData();
 
-    // Setup Realtime (optional, fails gracefully)
     const initRealtime = async () => {
       try {
         if (!blink || !blink.realtime || typeof blink.realtime.channel !== 'function') return;
         const channel = blink.realtime.channel('global-mosaic');
         channelRef.current = channel;
-
         await channel.subscribe({ userId: 'current_user' });
-
         channel.onMessage((msg: any) => {
           if (msg.type === 'pixel_update') {
             const { x, y, color } = msg.data;
-            setPixels(prev => ({
-              ...prev,
-              [`${x}_${y}`]: color
-            }));
+            if (typeof x === 'number' && typeof y === 'number') {
+              setPixels(prev => ({ ...prev, [`${x}_${y}`]: color }));
+            }
           }
         });
       } catch (err) {
@@ -114,32 +111,30 @@ export function CollaborativeMosaic() {
     };
 
     initRealtime();
-
-    return () => {
-      channelRef.current?.unsubscribe();
-    };
+    return () => { channelRef.current?.unsubscribe(); };
   }, []);
 
   useEffect(() => {
     setSelectedColor(palette[0]);
   }, [scheme]);
 
-  const handlePress = async (event: any) => {
+  const handlePress = useCallback(async (event: any) => {
     if (userPixels <= 0) {
       alert("Keine Pixels mehr! Logge deine Stimmung, um mehr zu verdienen.");
       return;
     }
 
     const { locationX, locationY } = event.nativeEvent;
-    const x = Math.floor(locationX / PIXEL_SIZE);
-    const y = Math.floor(locationY / PIXEL_SIZE);
+    if (typeof locationX !== 'number' || typeof locationY !== 'number') return;
+
+    const x = Math.floor(locationX / pixelSize);
+    const y = Math.floor(locationY / pixelSize);
 
     if (x < 0 || x >= CANVAS_SIZE || y < 0 || y >= CANVAS_SIZE) return;
 
     const currentKey = `${x}_${y}`;
     if (pixels[currentKey] === selectedColor) return;
 
-    // Optimistic update
     setPixels(prev => ({ ...prev, [currentKey]: selectedColor }));
     setUserPixels(prev => prev - 1);
 
@@ -147,7 +142,6 @@ export function CollaborativeMosaic() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
-    // Persist to DB
     await Promise.all([
       safeDbUpsertPixel(x, y, selectedColor, 'current_user'),
       safeDbUpdateUserPixels('current_user', -1)
@@ -155,35 +149,36 @@ export function CollaborativeMosaic() {
 
     queryClient.invalidateQueries({ queryKey: ['users', 'current_user'] });
 
-    // Broadcast to others
     if (channelRef.current) {
       channelRef.current.publish('pixel_update', { x, y, color: selectedColor }, { userId: 'current_user' });
     }
-  };
+  }, [pixelSize, userPixels, selectedColor, pixels, queryClient]);
 
-  // Simple SVG pixel rendering (no animated components for SVG to avoid crashes)
   const pixelElements = useMemo(() => {
     return Object.entries(pixels).map(([key, color]) => {
-      const [x, y] = key.split('_').map(Number);
+      const parts = key.split('_');
+      const x = Number(parts[0]);
+      const y = Number(parts[1]);
+      if (isNaN(x) || isNaN(y)) return null;
       const discoColor = getDiscoColor(x, y);
       return (
         <Rect
           key={key}
-          x={x * PIXEL_SIZE}
-          y={y * PIXEL_SIZE}
-          width={PIXEL_SIZE}
-          height={PIXEL_SIZE}
+          x={x * pixelSize}
+          y={y * pixelSize}
+          width={pixelSize}
+          height={pixelSize}
           fill={discoColor || color}
         />
       );
-    });
-  }, [pixels, isDiscoEnabled, discoTick]);
+    }).filter(Boolean);
+  }, [pixels, isDiscoEnabled, discoTick, pixelSize, getDiscoColor]);
 
   return (
     <View style={styles.container}>
       <View style={styles.pixelInfo}>
         <View style={styles.pixelCount}>
-          <Ionicons name="color-palette" size={18} color={colors.text} />
+          <Ionicons name="color-palette" size={16} color={colors.text} />
           <Text style={styles.pixelText}>{userPixels} {t('pixels_left')}</Text>
         </View>
         <View style={styles.schemeSelector}>
@@ -199,14 +194,14 @@ export function CollaborativeMosaic() {
         </View>
       </View>
 
-      <View style={styles.canvasContainer}>
+      <View style={[styles.canvasContainer, { width: totalWidth + 4, height: totalWidth + 4 }]}>
         {loading ? (
           <ActivityIndicator size="large" color={colors.primary} />
         ) : (
-          <View style={styles.canvasWrapper}>
+          <View style={{ width: totalWidth, height: totalWidth }}>
             <Pressable onPress={handlePress}>
-              <Svg width={TOTAL_WIDTH} height={TOTAL_WIDTH}>
-                <Rect width={TOTAL_WIDTH} height={TOTAL_WIDTH} fill="#0a0a0a" />
+              <Svg width={totalWidth} height={totalWidth}>
+                <Rect width={totalWidth} height={totalWidth} fill="#0a0a0a" />
                 {pixelElements}
               </Svg>
             </Pressable>
@@ -243,7 +238,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   pixelCount: {
     flexDirection: 'row',
@@ -285,10 +280,9 @@ const styles = StyleSheet.create({
   infoText: {
     ...typography.tiny,
     color: colors.textMuted,
+    marginBottom: spacing.xs,
   },
   canvasContainer: {
-    width: TOTAL_WIDTH + 4,
-    height: TOTAL_WIDTH + 4,
     backgroundColor: '#000',
     borderRadius: borderRadius.md,
     overflow: 'hidden',
@@ -298,17 +292,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'center',
   },
-  canvasWrapper: {
-    width: TOTAL_WIDTH,
-    height: TOTAL_WIDTH,
-  },
   palette: {
-    marginTop: spacing.md,
-    height: 60,
+    marginTop: spacing.sm,
+    height: 64,
   },
   paletteScroll: {
     gap: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   colorItem: {
     width: 40,
