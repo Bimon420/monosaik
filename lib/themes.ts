@@ -1,4 +1,5 @@
 export const MOOD_COLORS = [
+  // Original 12
   { color: '#FFD700', name: 'Freudig' },
   { color: '#40E0D0', name: 'Ruhig' },
   { color: '#FF4500', name: 'Energetisch' },
@@ -10,7 +11,20 @@ export const MOOD_COLORS = [
   { color: '#FF8C00', name: 'Mutig' },
   { color: '#00CED1', name: 'Friedlich' },
   { color: '#8B4513', name: 'Geerdet' },
-  { color: '#000000', name: 'Geheimnisvoll' },
+  { color: '#1C1C3E', name: 'Geheimnisvoll' },
+  // New 12
+  { color: '#FF69B4', name: 'Verliebt' },
+  { color: '#7CFC00', name: 'Dankbar' },
+  { color: '#6A5ACD', name: 'Einsam' },
+  { color: '#FFA500', name: 'Optimistisch' },
+  { color: '#A9A9A9', name: 'Erschöpft' },
+  { color: '#00FA9A', name: 'Neugierig' },
+  { color: '#DC143C', name: 'Wütend' },
+  { color: '#DAA520', name: 'Stolz' },
+  { color: '#9370DB', name: 'Ängstlich' },
+  { color: '#87CEEB', name: 'Entspannt' },
+  { color: '#FF6347', name: 'Inspiriert' },
+  { color: '#D2691E', name: 'Nostalgisch' },
 ];
 
 export const THEME_ICONS = [
@@ -26,31 +40,49 @@ export const THEME_MOODS: Record<string, { icon: string }[]> = {
   classic: [
     { icon: 'sunny' }, { icon: 'water' }, { icon: 'flash' }, { icon: 'rainy' },
     { icon: 'color-wand' }, { icon: 'heart' }, { icon: 'leaf' }, { icon: 'remove-circle' },
-    { icon: 'shield' }, { icon: 'cloud' }, { icon: 'planet' }, { icon: 'moon' }
+    { icon: 'shield' }, { icon: 'cloud' }, { icon: 'planet' }, { icon: 'moon' },
+    { icon: 'heart-outline' }, { icon: 'flower' }, { icon: 'telescope' }, { icon: 'compass' },
+    { icon: 'ribbon' }, { icon: 'sparkles' }, { icon: 'bulb' }, { icon: 'eye' },
+    { icon: 'gift' }, { icon: 'bookmark' }, { icon: 'aperture' }, { icon: 'rose' },
   ],
   gaming: [
     { icon: 'game-controller' }, { icon: 'trophy' }, { icon: 'skull' }, { icon: 'shield-half' },
     { icon: 'diamond' }, { icon: 'heart' }, { icon: 'star' }, { icon: 'medal' },
-    { icon: 'joystick' }, { icon: 'disc' }, { icon: 'play' }, { icon: 'pause' }
+    { icon: 'disc' }, { icon: 'play' }, { icon: 'pause' }, { icon: 'headset' },
+    { icon: 'speedometer' }, { icon: 'rocket' }, { icon: 'terminal' }, { icon: 'power' },
+    { icon: 'trending-up' }, { icon: 'pulse' }, { icon: 'refresh' }, { icon: 'flag' },
+    { icon: 'options' }, { icon: 'grid' }, { icon: 'layers' }, { icon: 'construct' },
   ],
   food: [
     { icon: 'pizza' }, { icon: 'ice-cream' }, { icon: 'cafe' }, { icon: 'beer' },
     { icon: 'wine' }, { icon: 'fast-food' }, { icon: 'nutrition' }, { icon: 'restaurant' },
-    { icon: 'egg' }, { icon: 'fish' }, { icon: 'pint' }, { icon: 'flask' }
+    { icon: 'egg' }, { icon: 'fish' }, { icon: 'pint' }, { icon: 'flask' },
+    { icon: 'storefront' }, { icon: 'bag' }, { icon: 'star' }, { icon: 'leaf' },
+    { icon: 'flower' }, { icon: 'gift' }, { icon: 'ribbon' }, { icon: 'ticket' },
+    { icon: 'bookmark' }, { icon: 'globe' }, { icon: 'happy' }, { icon: 'heart' },
   ],
   nature: [
     { icon: 'leaf' }, { icon: 'flower' }, { icon: 'bonfire' }, { icon: 'cloud' },
     { icon: 'rainy' }, { icon: 'sunny' }, { icon: 'snow' }, { icon: 'thunderstorm' },
-    { icon: 'rose' }, { icon: 'tree' }, { icon: 'water' }, { icon: 'flame' }
+    { icon: 'rose' }, { icon: 'tree' }, { icon: 'water' }, { icon: 'flame' },
+    { icon: 'telescope' }, { icon: 'sparkles' }, { icon: 'earth' }, { icon: 'globe' },
+    { icon: 'bulb' }, { icon: 'compass' }, { icon: 'aperture' }, { icon: 'pulse' },
+    { icon: 'heart-outline' }, { icon: 'gift' }, { icon: 'ribbon' }, { icon: 'eye' },
   ],
   retro: [
     { icon: 'tv' }, { icon: 'radio' }, { icon: 'camera' }, { icon: 'videocam' },
     { icon: 'recording' }, { icon: 'mic' }, { icon: 'musical-notes' }, { icon: 'headset' },
-    { icon: 'calculator' }, { icon: 'watch' }, { icon: 'hourglass' }, { icon: 'magnet' }
+    { icon: 'calculator' }, { icon: 'watch' }, { icon: 'hourglass' }, { icon: 'magnet' },
+    { icon: 'film' }, { icon: 'key' }, { icon: 'mail' }, { icon: 'map' },
+    { icon: 'compass' }, { icon: 'bookmark' }, { icon: 'flag' }, { icon: 'ticket' },
+    { icon: 'ribbon' }, { icon: 'gift' }, { icon: 'aperture' }, { icon: 'telescope' },
   ],
   minimal: [
     { icon: 'square' }, { icon: 'ellipse' }, { icon: 'triangle' }, { icon: 'star' },
     { icon: 'heart' }, { icon: 'close' }, { icon: 'add' }, { icon: 'remove' },
-    { icon: 'play' }, { icon: 'pause' }, { icon: 'stop' }, { icon: 'radio-button-on' }
-  ]
+    { icon: 'play' }, { icon: 'pause' }, { icon: 'stop' }, { icon: 'radio-button-on' },
+    { icon: 'checkmark' }, { icon: 'arrow-up' }, { icon: 'arrow-down' }, { icon: 'arrow-forward' },
+    { icon: 'refresh' }, { icon: 'sync' }, { icon: 'share' }, { icon: 'expand' },
+    { icon: 'funnel' }, { icon: 'swap-horizontal' }, { icon: 'options' }, { icon: 'grid' },
+  ],
 };

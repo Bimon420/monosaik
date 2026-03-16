@@ -7,28 +7,22 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { safeDbCreate, safeDbList, safeDbUpdate, safeDbUpdateUserPixels, safeDbGet } from '@/lib/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { THEME_MOODS } from '@/lib/themes';
+import { MOOD_COLORS, THEME_MOODS } from '@/lib/themes';
 import { useI18n } from '@/lib/i18n';
 import { useDiscoStore } from '@/lib/store';
 
-const MOOD_COLORS = [
-  { color: '#FFD700', name: 'Freudig' },
-  { color: '#40E0D0', name: 'Ruhig' },
-  { color: '#FF4500', name: 'Energetisch' },
-  { color: '#4169E1', name: 'Traurig' },
-  { color: '#8A2BE2', name: 'Kreativ' },
-  { color: '#FF1493', name: 'Aufgeregt' },
-  { color: '#ADFF2F', name: 'Frisch' },
-  { color: '#708090', name: 'Neutral' },
-  { color: '#FF8C00', name: 'Mutig' },
-  { color: '#00CED1', name: 'Friedlich' },
-  { color: '#8B4513', name: 'Geerdet' },
-  { color: '#000000', name: 'Geheimnisvoll' },
-];
-
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
 const ITEM_SIZE = 80;
-const CIRCLE_SIZE = 62;
+const CIRCLE_SIZE = 60;
+
+function isDark(hex: string): boolean {
+  const h = hex.replace('#', '');
+  if (h.length < 6) return false;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b < 140;
+}
 
 export default function DailyMoodScreen() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
@@ -131,6 +125,7 @@ export default function DailyMoodScreen() {
     const moodIndex = MOOD_COLORS.findIndex(m => m.color === selectedMood);
     const iconName = themeIcons[moodIndex]?.icon || 'checkmark';
     const circleColor = isDiscoEnabled ? getDiscoColor(0) : (selectedMood || colors.primary);
+    const iconColor = isDiscoEnabled ? '#FFF' : (selectedMood && isDark(selectedMood) ? '#FFF' : '#000');
     return (
       <Container safeArea edges={['top']} style={styles.container}>
         <View style={styles.discoRow}>
@@ -140,7 +135,7 @@ export default function DailyMoodScreen() {
         </View>
         <View style={styles.centerContent}>
           <Animated.View entering={FadeInDown.duration(600)} style={[styles.successCircle, { backgroundColor: circleColor }]}>
-            <Ionicons name={iconName as any} size={44} color={selectedMood === '#000000' || selectedMood === '#4169E1' || isDiscoEnabled ? '#FFF' : '#000'} />
+            <Ionicons name={iconName as any} size={44} color={iconColor} />
           </Animated.View>
           <Animated.Text entering={FadeInDown.delay(200).duration(500)} style={styles.successTitle}>
             {rewardEarned ? t('daily_success_title') : t('daily_update_title')}
@@ -178,19 +173,23 @@ export default function DailyMoodScreen() {
           <View style={styles.grid}>
             {MOOD_COLORS.map((mood, index) => {
               const discoColor = getDiscoColor(index);
+              const effectiveColor = discoColor || mood.color;
+              const iconColor = (selectedMood === mood.color || isDiscoEnabled)
+                ? (isDark(effectiveColor) ? '#FFF' : '#000')
+                : 'rgba(255,255,255,0.4)';
               return (
                 <View key={mood.color} style={styles.moodItem}>
                   <Pressable onPress={() => handleMoodSelect(mood)}>
                     <View style={[
                       styles.colorCircle,
-                      { backgroundColor: discoColor || mood.color },
+                      { backgroundColor: effectiveColor },
                       selectedMood === mood.color && styles.selectedCircle,
                       isDiscoEnabled && { transform: [{ scale: index % 2 === 0 ? 1.08 : 0.95 }] }
                     ]}>
                       <Ionicons
                         name={themeIcons[index]?.icon as any || 'help'}
-                        size={24}
-                        color={selectedMood === mood.color || isDiscoEnabled ? (mood.color === '#000000' || mood.color === '#4169E1' ? '#FFF' : '#000') : 'rgba(255,255,255,0.4)'}
+                        size={22}
+                        color={iconColor}
                       />
                     </View>
                   </Pressable>
@@ -239,7 +238,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   titleBlock: {
     flex: 1,
@@ -284,13 +283,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: spacing.xs,
-    maxWidth: 380,
+    gap: 6,
+    maxWidth: 400,
   },
   moodItem: {
     width: ITEM_SIZE,
     alignItems: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: 4,
   },
   colorCircle: {
     width: CIRCLE_SIZE,
@@ -303,14 +302,14 @@ const styles = StyleSheet.create({
   selectedCircle: {
     borderWidth: 3,
     borderColor: '#FFF',
-    transform: [{ scale: 1.06 }],
+    transform: [{ scale: 1.08 }],
   },
   moodName: {
     color: colors.text,
     marginTop: 4,
     fontWeight: '600',
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 9,
+    lineHeight: 12,
     textAlign: 'center',
   },
   footer: {
