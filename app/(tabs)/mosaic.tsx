@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Dimensions, ActivityIndicator, Pressable, Animated as RNAnimated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable, Animated as RNAnimated, useWindowDimensions } from 'react-native';
 import { Container } from '@/components/ui';
 import { colors, spacing, typography, borderRadius } from '@/constants/design';
 import { safeDbList } from '@/lib/api';
@@ -9,20 +9,17 @@ import { CollaborativeMosaic } from '@/components/CollaborativeMosaic';
 import { useI18n } from '@/lib/i18n';
 import { useDiscoStore } from '@/lib/store';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const SCREEN_HEIGHT = Dimensions.get('window').height;
 const PERSONAL_GRID_COLS = 7;
-const PERSONAL_TILE_SIZE = (SCREEN_WIDTH - spacing.lg * 2 - spacing.sm * 6) / PERSONAL_GRID_COLS;
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
 const RAIN_DROP_COUNT = 30;
 const RAIN_COLORS = ['#FFD700', '#40E0D0', '#FF4500', '#4169E1', '#8A2BE2', '#FF1493', '#ADFF2F', '#00CED1', '#FF8C00'];
 
-function PixelRainAnimation({ onComplete }: { onComplete: () => void }) {
+function PixelRainAnimation({ onComplete, screenWidth, screenHeight }: { onComplete: () => void; screenWidth: number; screenHeight: number }) {
   const drops = useRef(
     Array.from({ length: RAIN_DROP_COUNT }, () => ({
       animY: new RNAnimated.Value(0),
       animOpacity: new RNAnimated.Value(1),
-      x: Math.random() * (SCREEN_WIDTH - 40),
+      x: Math.random() * Math.max(screenWidth - 40, 40),
       color: RAIN_COLORS[Math.floor(Math.random() * RAIN_COLORS.length)],
       size: 8 + Math.random() * 12,
       delay: Math.random() * 1500,
@@ -82,7 +79,7 @@ function PixelRainAnimation({ onComplete }: { onComplete: () => void }) {
               {
                 translateY: d.animY.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0, SCREEN_HEIGHT * 0.7],
+                  outputRange: [0, screenHeight * 0.7],
                 }),
               },
             ],
@@ -94,6 +91,9 @@ function PixelRainAnimation({ onComplete }: { onComplete: () => void }) {
 }
 
 export default function MosaicScreen() {
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const PERSONAL_TILE_SIZE = Math.max(8, (screenWidth - spacing.lg * 2 - spacing.sm * (PERSONAL_GRID_COLS - 1)) / PERSONAL_GRID_COLS);
+
   const [view, setView] = useState<'personal' | 'global'>('personal');
   const [showPixelRain, setShowPixelRain] = useState(false);
   const { t } = useI18n();
@@ -129,13 +129,18 @@ export default function MosaicScreen() {
   const renderPersonalItem = ({ item, index }: { item: any, index: number }) => {
     const discoColor = getDiscoColor(index);
     return (
-      <View style={[styles.tile, { backgroundColor: discoColor || item.color }]} />
+      <View style={{
+        width: PERSONAL_TILE_SIZE,
+        height: PERSONAL_TILE_SIZE,
+        borderRadius: borderRadius.xs,
+        backgroundColor: discoColor || item.color,
+      }} />
     );
   };
 
   return (
     <Container safeArea edges={['top']} style={styles.container}>
-      {showPixelRain && <PixelRainAnimation onComplete={() => setShowPixelRain(false)} />}
+      {showPixelRain && <PixelRainAnimation onComplete={() => setShowPixelRain(false)} screenWidth={screenWidth} screenHeight={screenHeight} />}
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <View style={styles.titleContainer}>
@@ -266,11 +271,6 @@ const styles = StyleSheet.create({
   personalGridRow: {
     gap: spacing.sm,
     marginBottom: spacing.sm,
-  },
-  tile: {
-    width: PERSONAL_TILE_SIZE,
-    height: PERSONAL_TILE_SIZE,
-    borderRadius: borderRadius.xs,
   },
   emptyState: {
     marginTop: spacing.xxxl,
