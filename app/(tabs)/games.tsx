@@ -9,7 +9,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { safeDbUpdateUserPixels } from '@/lib/api';
 import { MOOD_COLORS } from '@/lib/themes';
 
-type GameId = 'pixel_match' | 'color_flash' | 'pixel_hunt' | 'farbsequenz' | 'farb_mix' | 'stroop';
+type GameId = 'pixel_match' | 'color_flash' | 'pixel_hunt' | 'farbsequenz' | 'farb_mix' | 'stroop' | 'farb_gedachtnis';
 
 // ── Rewards ──────────────────────────────────────────────────────────────────
 const REWARDS = {
@@ -19,6 +19,7 @@ const REWARDS = {
   farbsequenz: 20,
   farb_mix: 15,
   stroop: 25,
+  farb_gedachtnis: 20,
 } as const;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -627,6 +628,163 @@ function StroopGame({ onBack }: { onBack: () => void }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// GAME 7: FARB-GEDÄCHTNIS (Color Memory)
+// ═══════════════════════════════════════════════════════════════════════════════
+const MEMORY_PAIR_COLORS = MOOD_COLORS.slice(0, 8).map(m => m.color);
+
+type MemoryCard = { id: number; color: string; isFlipped: boolean; isMatched: boolean };
+
+function FarbGedachtnisGame({ onBack }: { onBack: () => void }) {
+  const { width } = useWindowDimensions();
+  const cardSize = Math.floor((Math.min(width, 420) - spacing.xl * 2 - spacing.sm * 3) / 4);
+
+  const [cards, setCards] = useState<MemoryCard[]>([]);
+  const [phase, setPhase] = useState<'idle' | 'playing' | 'won' | 'lost'>('idle');
+  const [moves, setMoves] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(60);
+  const lockRef = useRef(false);
+  const pendingIdRef = useRef<number | null>(null);
+  const pendingColorRef = useRef<string | null>(null);
+  const timerRef = useRef<any>(null);
+  const rewardMutation = useRewardMutation(REWARDS.farb_gedachtnis);
+
+  const initGame = useCallback(() => {
+    const deck: MemoryCard[] = [...MEMORY_PAIR_COLORS, ...MEMORY_PAIR_COLORS]
+      .sort(() => Math.random() - 0.5)
+      .map((color, i) => ({ id: i, color, isFlipped: false, isMatched: false }));
+    setCards(deck);
+    setMoves(0);
+    setTimeLeft(60);
+    lockRef.current = false;
+    pendingIdRef.current = null;
+    pendingColorRef.current = null;
+    setPhase('playing');
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'playing') { clearInterval(timerRef.current); return; }
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) { clearInterval(timerRef.current); setPhase('lost'); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase === 'playing' && cards.length > 0 && cards.every(c => c.isMatched)) {
+      clearInterval(timerRef.current);
+      setPhase('won');
+      rewardMutation.mutate();
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }, [cards, phase]);
+
+  const handleCardPress = useCallback((card: MemoryCard) => {
+    if (phase !== 'playing' || lockRef.current || card.isFlipped || card.isMatched) return;
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    setCards(prev => prev.map(c => c.id === card.id ? { ...c, isFlipped: true } : c));
+
+    if (pendingIdRef.current === null) {
+      pendingIdRef.current = card.id;
+      pendingColorRef.current = card.color;
+    } else {
+      const firstId = pendingIdRef.current;
+      const firstColor = pendingColorRef.current;
+      pendingIdRef.current = null;
+      pendingColorRef.current = null;
+      setMoves(m => m + 1);
+      lockRef.current = true;
+
+      if (firstColor === card.color && firstId !== card.id) {
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setCards(prev => prev.map(c =>
+          c.id === firstId || c.id === card.id ? { ...c, isFlipped: true, isMatched: true } : c
+        ));
+        lockRef.current = false;
+      } else {
+        setTimeout(() => {
+          setCards(prev => prev.map(c =>
+            c.id === firstId || c.id === card.id ? { ...c, isFlipped: false } : c
+          ));
+          lockRef.current = false;
+        }, 700);
+      }
+    }
+  }, [phase]);
+
+  const reset = () => { clearInterval(timerRef.current); setPhase('idle'); setCards([]); };
+
+  const matchedCount = cards.filter(c => c.isMatched).length / 2;
+
+  return (
+    <Container safeArea edges={['top']} style={s.container}>
+      <GameHeader title="Farb-Gedächtnis" reward={REWARDS.farb_gedachtnis} onBack={() => { clearInterval(timerRef.current); onBack(); }} />
+      <View style={s.gameContent}>
+        {phase === 'idle' && (
+          <StartScreen icon="albums" iconBg="#06B6D420" title="Farb-Gedächtnis"
+            desc="Finde alle 8 Farbpaare! Tippe zwei Karten auf — stimmen die Farben überein, bleiben sie aufgedeckt. Du hast 60 Sekunden."
+            onStart={initGame} />
+        )}
+        {(phase === 'playing') && (
+          <View style={s.memoryContainer}>
+            <View style={s.memoryStats}>
+              <View style={s.memoryStatChip}>
+                <Ionicons name="time-outline" size={14} color={timeLeft <= 10 ? '#EF4444' : colors.textMuted} />
+                <Text style={[s.memoryStatText, timeLeft <= 10 && { color: '#EF4444' }]}>{timeLeft}s</Text>
+              </View>
+              <View style={s.memoryStatChip}>
+                <Ionicons name="checkmark-circle-outline" size={14} color={colors.textMuted} />
+                <Text style={s.memoryStatText}>{matchedCount} / 8</Text>
+              </View>
+              <View style={s.memoryStatChip}>
+                <Ionicons name="swap-horizontal-outline" size={14} color={colors.textMuted} />
+                <Text style={s.memoryStatText}>{moves}</Text>
+              </View>
+            </View>
+            <View style={s.memoryGrid}>
+              {cards.map(card => (
+                <Pressable key={card.id} onPress={() => handleCardPress(card)}
+                  style={[
+                    s.memoryCard,
+                    { width: cardSize, height: cardSize },
+                    card.isFlipped || card.isMatched
+                      ? { backgroundColor: card.color }
+                      : { backgroundColor: colors.surface },
+                    card.isMatched && { opacity: 0.7 },
+                  ]}>
+                  {(card.isFlipped || card.isMatched) ? (
+                    card.isMatched
+                      ? <Ionicons name="checkmark" size={cardSize * 0.4} color="rgba(255,255,255,0.9)" />
+                      : null
+                  ) : (
+                    <Ionicons name="help" size={cardSize * 0.35} color="rgba(255,255,255,0.15)" />
+                  )}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+        {(phase === 'won' || phase === 'lost') && (
+          <Animated.View entering={FadeInUp} style={s.endContainer}>
+            <Ionicons name={phase === 'won' ? 'trophy' : 'time'} size={72} color={phase === 'won' ? '#FFD700' : '#EF4444'} />
+            <Text style={s.winBigText}>{phase === 'won' ? 'Gewonnen!' : 'Zeit abgelaufen!'}</Text>
+            <Text style={s.winSubText}>
+              {phase === 'won'
+                ? `+${REWARDS.farb_gedachtnis} Pixels in ${moves} Zügen!`
+                : `${matchedCount} von 8 Paaren gefunden.`}
+            </Text>
+            <Button variant="primary" onPress={reset} style={s.startButton}>Nochmal</Button>
+          </Animated.View>
+        )}
+      </View>
+    </Container>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // GAME HUB
 // ═══════════════════════════════════════════════════════════════════════════════
 const GAME_CARDS: { id: GameId; icon: string; color: string; title: string; desc: string }[] = [
@@ -636,6 +794,7 @@ const GAME_CARDS: { id: GameId; icon: string; color: string; title: string; desc
   { id: 'farbsequenz', icon: 'musical-notes', color: '#3B82F6', title: 'Farbsequenz', desc: 'Simon Says mit Farben — merke dir die Reihenfolge!' },
   { id: 'farb_mix', icon: 'color-palette', color: '#F97316', title: 'Farb-Mix', desc: 'Welche Farbe entsteht aus der Mischung? Errate es!' },
   { id: 'stroop', icon: 'eye', color: '#EC4899', title: 'Stroop-Test', desc: 'Tippe auf die Farbe der Schrift — nicht das Wort!' },
+  { id: 'farb_gedachtnis', icon: 'albums', color: '#06B6D4', title: 'Farb-Gedächtnis', desc: 'Decke Kartenpaare auf und finde alle 8 Farbpaare!' },
 ];
 
 export default function GamesScreen() {
@@ -648,6 +807,7 @@ export default function GamesScreen() {
   if (activeGame === 'farbsequenz') return <FarbsequenzGame onBack={back} />;
   if (activeGame === 'farb_mix') return <FarbMixGame onBack={back} />;
   if (activeGame === 'stroop') return <StroopGame onBack={back} />;
+  if (activeGame === 'farb_gedachtnis') return <FarbGedachtnisGame onBack={back} />;
 
   return (
     <Container safeArea edges={['top']} style={s.container}>
@@ -773,4 +933,26 @@ const s = StyleSheet.create({
   },
   stroopDot: { width: 20, height: 20, borderRadius: 10 },
   stroopOptionText: { ...typography.captionBold, color: colors.text },
+
+  // Farb-Gedächtnis (Memory)
+  memoryContainer: { alignItems: 'center', gap: spacing.md, width: '100%' },
+  memoryStats: { flexDirection: 'row', gap: spacing.sm },
+  memoryStatChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.surface, paddingHorizontal: spacing.sm, paddingVertical: 5,
+    borderRadius: borderRadius.full,
+  },
+  memoryStatText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+  memoryGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm,
+    justifyContent: 'center',
+  },
+  memoryCard: {
+    borderRadius: borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    ...shadows.sm,
+  },
 });
