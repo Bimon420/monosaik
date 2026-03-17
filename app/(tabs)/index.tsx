@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator, Animated as RNAnimated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator, Animated as RNAnimated, Dimensions, Modal } from 'react-native';
 import { Container, Button } from '@/components/ui';
-import { colors, spacing, typography, shadows } from '@/constants/design';
+import { colors, spacing, typography, shadows, borderRadius } from '@/constants/design';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { safeDbCreate, safeDbList, safeDbUpdate, safeDbUpdateUserPixels, safeDbGet } from '@/lib/api';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MOOD_COLORS, THEME_MOODS } from '@/lib/themes';
-import { useI18n } from '@/lib/i18n';
+import { MOOD_COLORS } from '@/lib/themes';
+import { useI18n, LANGUAGES } from '@/lib/i18n';
 import { useDiscoStore } from '@/lib/store';
 
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
@@ -147,6 +147,70 @@ function ConfettiAnimation({ onComplete }: { onComplete: () => void }) {
   );
 }
 
+function OptionsMenu({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { language, setLanguage } = useI18n();
+  const { isDiscoEnabled, toggleDisco } = useDiscoStore();
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.optionsOverlay} onPress={onClose}>
+        <Pressable style={styles.optionsSheet} onPress={e => e.stopPropagation()}>
+          <View style={styles.optionsHeader}>
+            <Text style={styles.optionsTitle}>Einstellungen</Text>
+            <Pressable onPress={onClose} style={styles.optionsClose}>
+              <Ionicons name="close" size={20} color={colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <View style={styles.optionsSection}>
+            <Text style={styles.optionsSectionLabel}>Pixel-Regen</Text>
+            <Pressable
+              onPress={() => { toggleDisco(); if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              style={[styles.discoRow, isDiscoEnabled && styles.discoRowActive]}
+            >
+              <Ionicons
+                name={isDiscoEnabled ? 'musical-notes' : 'disc-outline'}
+                size={18}
+                color={isDiscoEnabled ? '#FFF' : colors.primary}
+              />
+              <Text style={[styles.discoRowText, isDiscoEnabled && { color: '#FFF' }]}>
+                {isDiscoEnabled ? 'Pixel-Regen aktiv' : 'Pixel-Regen starten'}
+              </Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.optionsDivider} />
+
+          <View style={styles.optionsSection}>
+            <Text style={styles.optionsSectionLabel}>Sprache</Text>
+            <View style={styles.langGrid}>
+              {LANGUAGES.map(lang => (
+                <Pressable
+                  key={lang.id}
+                  onPress={() => {
+                    setLanguage(lang.id);
+                    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                  style={[styles.langChip, language === lang.id && styles.langChipActive]}
+                >
+                  <Text style={[styles.langChipText, language === lang.id && styles.langChipTextActive]}>
+                    {lang.name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function DailyMoodScreen() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -154,9 +218,10 @@ export default function DailyMoodScreen() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [currentStreak, setCurrentStreak] = useState(0);
   const [discoTick, setDiscoTick] = useState(0);
+  const [showOptions, setShowOptions] = useState(false);
   const queryClient = useQueryClient();
   const { t } = useI18n();
-  const { isDiscoEnabled, toggleDisco } = useDiscoStore();
+  const { isDiscoEnabled } = useDiscoStore();
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
@@ -197,14 +262,6 @@ export default function DailyMoodScreen() {
   const streak = useMemo(() => calculateStreak(recentMoods || []), [recentMoods]);
   const streakEndingYesterday = useMemo(() => calculateStreak(recentMoods || [], false), [recentMoods]);
   const streakMilestone = useMemo(() => getStreakMilestone(streak), [streak]);
-
-  const { data: userData } = useQuery({
-    queryKey: ['users', 'current_user'],
-    queryFn: () => safeDbGet('users', 'current_user'),
-  });
-
-  const activeTheme = userData?.themeIcon || 'classic';
-  const themeIcons = THEME_MOODS[activeTheme] || THEME_MOODS.classic;
 
   useEffect(() => {
     if (todayMood && !selectedMood && !submitted) {
@@ -267,24 +324,20 @@ export default function DailyMoodScreen() {
 
   if (submitted) {
     const mood = MOOD_COLORS.find(m => m.color === selectedMood);
-    const moodIndex = MOOD_COLORS.findIndex(m => m.color === selectedMood);
-    const iconName = themeIcons[moodIndex]?.icon || 'checkmark';
     const circleColor = isDiscoEnabled ? getDiscoColor(0) : (selectedMood || colors.primary);
-    const iconColor = isDiscoEnabled ? '#FFF' : (selectedMood && isDark(selectedMood) ? '#FFF' : '#000');
     const displayStreak = currentStreak > 0 ? currentStreak : streak;
     const displayMilestone = getStreakMilestone(displayStreak);
     return (
       <Container safeArea edges={['top']} style={styles.container}>
         {showConfetti && <ConfettiAnimation onComplete={() => setShowConfetti(false)} />}
-        <View style={styles.discoRow}>
-          <Pressable onPress={toggleDisco} style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}>
-            <Ionicons name={isDiscoEnabled ? "musical-notes" : "disc-outline"} size={22} color={isDiscoEnabled ? "#FFF" : colors.primary} />
+        <OptionsMenu visible={showOptions} onClose={() => setShowOptions(false)} />
+        <View style={styles.topBar}>
+          <Pressable onPress={() => setShowOptions(true)} style={styles.optionsButton}>
+            <Ionicons name="settings-outline" size={20} color={colors.textMuted} />
           </Pressable>
         </View>
         <View style={styles.centerContent}>
-          <Animated.View entering={FadeInDown.duration(600)} style={[styles.successCircle, { backgroundColor: circleColor }]}>
-            <Ionicons name={iconName as any} size={44} color={iconColor} />
-          </Animated.View>
+          <Animated.View entering={FadeInDown.duration(600)} style={[styles.successCircle, { backgroundColor: circleColor }]} />
           <Animated.Text entering={FadeInDown.delay(200).duration(500)} style={styles.successTitle}>
             {rewardEarned ? t('daily_success_title') : t('daily_update_title')}
           </Animated.Text>
@@ -308,6 +361,7 @@ export default function DailyMoodScreen() {
 
   return (
     <Container safeArea edges={['top']} style={styles.container}>
+      <OptionsMenu visible={showOptions} onClose={() => setShowOptions(false)} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -323,8 +377,8 @@ export default function DailyMoodScreen() {
                 <Text style={styles.streakPillText}>{streakMilestone}</Text>
               </View>
             )}
-            <Pressable onPress={toggleDisco} style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}>
-              <Ionicons name={isDiscoEnabled ? "musical-notes" : "disc-outline"} size={22} color={isDiscoEnabled ? "#FFF" : colors.primary} />
+            <Pressable onPress={() => setShowOptions(true)} style={styles.optionsButton}>
+              <Ionicons name="settings-outline" size={20} color={colors.textMuted} />
             </Pressable>
           </View>
         </View>
@@ -334,9 +388,6 @@ export default function DailyMoodScreen() {
             {MOOD_COLORS.map((mood, index) => {
               const discoColor = getDiscoColor(index);
               const effectiveColor = discoColor || mood.color;
-              const iconColor = (selectedMood === mood.color || isDiscoEnabled)
-                ? (isDark(effectiveColor) ? '#FFF' : '#000')
-                : 'rgba(255,255,255,0.4)';
               return (
                 <View key={mood.color} style={styles.moodItem}>
                   <Pressable onPress={() => handleMoodSelect(mood)}>
@@ -345,13 +396,7 @@ export default function DailyMoodScreen() {
                       { backgroundColor: effectiveColor },
                       selectedMood === mood.color && styles.selectedCircle,
                       isDiscoEnabled && { transform: [{ scale: index % 2 === 0 ? 1.08 : 0.95 }] }
-                    ]}>
-                      <Ionicons
-                        name={themeIcons[index]?.icon as any || 'help'}
-                        size={22}
-                        color={iconColor}
-                      />
-                    </View>
+                    ]} />
                   </Pressable>
                   <Text style={styles.moodName}>{mood.name}</Text>
                 </View>
@@ -407,13 +452,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: spacing.xs,
   },
-  discoRow: {
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xs,
   },
-  discoButton: {
+  optionsButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
@@ -421,11 +466,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  discoButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   title: {
     fontSize: 26,
@@ -459,8 +500,6 @@ const styles = StyleSheet.create({
     width: CIRCLE_SIZE,
     height: CIRCLE_SIZE,
     borderRadius: CIRCLE_SIZE / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
     ...shadows.md,
   },
   selectedCircle: {
@@ -500,8 +539,6 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: spacing.md,
   },
   successTitle: {
@@ -538,5 +575,99 @@ const styles = StyleSheet.create({
     color: '#FF8C00',
     fontWeight: '700',
     fontSize: 11,
+  },
+
+  // Options modal
+  optionsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  optionsSheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 32,
+    ...shadows.lg,
+  },
+  optionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  optionsTitle: {
+    ...typography.h3,
+    color: colors.text,
+  },
+  optionsClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionsDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginVertical: spacing.sm,
+  },
+  optionsSection: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+  },
+  optionsSectionLabel: {
+    fontSize: 10,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: spacing.sm,
+  },
+  discoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  discoRowActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  discoRowText: {
+    ...typography.captionBold,
+    color: colors.textMuted,
+  },
+  langGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  langChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  langChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  langChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  langChipTextActive: {
+    color: '#FFF',
   },
 });
