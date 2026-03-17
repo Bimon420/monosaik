@@ -32,12 +32,25 @@ EXPO_NO_TELEMETRY=1 npx expo start --web --port 5000
 The app is served on port 5000 via Metro bundler.
 
 ## Features
-- **Mood Tracking**: 32 mood colors across 3+ rows with German names and themed icons (6 icon themes)
-- **Collaborative Mosaic**: Real-time shared pixel canvas with optimistic UI and rollback on failure
+- **Mood Tracking**: 32 mood colors with German names; pure color circles (no icons)
+- **Options Menu**: Gear button on the daily screen opens a bottom sheet with language selector (17 languages) and disco-mode toggle
+- **Collaborative Mosaic**: Real-time shared 64×64 pixel canvas
+  - Canvas state persisted in `localStorage` (`monsaik_canvas_v1`)
+  - Live sync via Blink realtime channel `global-mosaic` — `pixel_update`, `request_canvas`, `canvas_snapshot` messages
+  - On mount, requests a canvas snapshot from peers if local storage is empty
+  - Pixel balance persisted in both Blink DB (`users.pixelBalance`) and `localStorage` (`monsaik_balance_v1`)
+  - SVG has `pointerEvents: 'none'` on web so the Pressable wrapper captures all click events
+  - Coordinate extraction falls back from `locationX/Y` to `pageX/Y - containerPos` for web reliability
 - **Disco Mode**: Synchronized color cycling at 400ms intervals across all screens
 - **Mood Streak**: Tracks consecutive daily mood logging; shows milestone badges (3/7/14 days) and confetti animation
 - **Pixel Rain Easter Egg**: Long-press the header title in the global mosaic view for a pixel rain animation
-- **Games & Social**: Mini-games and social interaction tabs
+- **7 Mini-Games**: Muster-Match, Farbblitz, Pixel-Jagd, Farbsequenz, Farb-Mix, Stroop-Test, Farb-Gedächtnis (color memory)
+
+## Important Architecture Notes
+- `db.globalMosaic` does NOT exist in the Blink project schema — canvas state uses localStorage instead
+- `db.moods` and `db.users` DO exist and are used for mood logging and pixel balance
+- `useWindowDimensions()` required for any layout using screen size — `Dimensions.get()` returns 0 on web at module level
+- Never use `npm install` directly — it crashes silently; use the package management tooling
 
 ## Deployment
 Configured as a static export:

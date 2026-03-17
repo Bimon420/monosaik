@@ -141,17 +141,41 @@ export async function safeDbUpsertPixel(x: number, y: number, color: string, use
     const db = blink?.db as any;
     if (!db) return null;
     const table = db.globalMosaic || db.global_mosaic;
-    if (!table || typeof table.upsert !== 'function') return null;
-    
+    if (!table) return null;
+
     const id = `${x}_${y}`;
-    return await table.upsert({
-      id,
-      x,
-      y,
-      color,
-      userId,
-      updatedAt: new Date().toISOString(),
-    });
+    const now = new Date().toISOString();
+
+    // Prefer native upsert if available
+    if (typeof table.upsert === 'function') {
+      try {
+        const r = await table.upsert({ id, x, y, color, userId, updatedAt: now });
+        if (r !== null && r !== undefined) return r;
+      } catch {}
+    }
+
+    // Fall back: get → update, or create
+    let existing: any = null;
+    if (typeof table.get === 'function') {
+      try { existing = await table.get(id); } catch {}
+    }
+
+    if (existing && typeof table.update === 'function') {
+      return await table.update(id, { color, userId, updatedAt: now });
+    }
+
+    if (typeof table.create === 'function') {
+      try {
+        return await table.create({ id, x, y, color, userId, updatedAt: now });
+      } catch {
+        // Duplicate (race) — try update
+        if (typeof table.update === 'function') {
+          try { return await table.update(id, { color, userId, updatedAt: now }); } catch {}
+        }
+      }
+    }
+
+    return null;
   } catch (err: any) {
     console.warn(`[MONSAIK] Pixel upsert failed:`, err?.message || err);
     return null;
