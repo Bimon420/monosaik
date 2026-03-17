@@ -25,6 +25,15 @@ export const MOOD_COLORS = [
   { color: '#87CEEB', name: 'Entspannt' },
   { color: '#FF6347', name: 'Inspiriert' },
   { color: '#D2691E', name: 'Nostalgisch' },
+  // Row 3: additional moods
+  { color: '#98FF98', name: 'Minzig' },
+  { color: '#B57EDC', name: 'Sanftmütig' },
+  { color: '#FF7F50', name: 'Herzlich' },
+  { color: '#FFBF00', name: 'Zuversichtlich' },
+  { color: '#778899', name: 'Gelassen' },
+  { color: '#FF007F', name: 'Leidenschaftlich' },
+  { color: '#32CD32', name: 'Lebendig' },
+  { color: '#E6E6FA', name: 'Verträumt' },
 ];
 
 export const THEME_ICONS = [
@@ -44,6 +53,8 @@ export const THEME_MOODS: Record<string, { icon: string }[]> = {
     { icon: 'heart-outline' }, { icon: 'flower' }, { icon: 'telescope' }, { icon: 'compass' },
     { icon: 'ribbon' }, { icon: 'sparkles' }, { icon: 'bulb' }, { icon: 'eye' },
     { icon: 'gift' }, { icon: 'bookmark' }, { icon: 'aperture' }, { icon: 'rose' },
+    { icon: 'snow' }, { icon: 'wine' }, { icon: 'flame' }, { icon: 'star' },
+    { icon: 'partly-sunny' }, { icon: 'bonfire' }, { icon: 'earth' }, { icon: 'cloudy-night' },
   ],
   gaming: [
     { icon: 'game-controller' }, { icon: 'trophy' }, { icon: 'skull' }, { icon: 'shield-half' },
@@ -52,6 +63,8 @@ export const THEME_MOODS: Record<string, { icon: string }[]> = {
     { icon: 'speedometer' }, { icon: 'rocket' }, { icon: 'terminal' }, { icon: 'power' },
     { icon: 'trending-up' }, { icon: 'pulse' }, { icon: 'refresh' }, { icon: 'flag' },
     { icon: 'options' }, { icon: 'grid' }, { icon: 'layers' }, { icon: 'construct' },
+    { icon: 'flash' }, { icon: 'planet' }, { icon: 'flame' }, { icon: 'compass' },
+    { icon: 'hourglass' }, { icon: 'color-wand' }, { icon: 'leaf' }, { icon: 'sparkles' },
   ],
   food: [
     { icon: 'pizza' }, { icon: 'ice-cream' }, { icon: 'cafe' }, { icon: 'beer' },
@@ -60,6 +73,8 @@ export const THEME_MOODS: Record<string, { icon: string }[]> = {
     { icon: 'storefront' }, { icon: 'bag' }, { icon: 'star' }, { icon: 'leaf' },
     { icon: 'flower' }, { icon: 'gift' }, { icon: 'ribbon' }, { icon: 'ticket' },
     { icon: 'bookmark' }, { icon: 'globe' }, { icon: 'happy' }, { icon: 'heart' },
+    { icon: 'snow' }, { icon: 'sparkles' }, { icon: 'flame' }, { icon: 'sunny' },
+    { icon: 'water' }, { icon: 'rose' }, { icon: 'nutrition' }, { icon: 'cloudy-night' },
   ],
   nature: [
     { icon: 'leaf' }, { icon: 'flower' }, { icon: 'bonfire' }, { icon: 'cloud' },
@@ -68,6 +83,8 @@ export const THEME_MOODS: Record<string, { icon: string }[]> = {
     { icon: 'telescope' }, { icon: 'sparkles' }, { icon: 'earth' }, { icon: 'globe' },
     { icon: 'bulb' }, { icon: 'compass' }, { icon: 'aperture' }, { icon: 'pulse' },
     { icon: 'heart-outline' }, { icon: 'gift' }, { icon: 'ribbon' }, { icon: 'eye' },
+    { icon: 'partly-sunny' }, { icon: 'cloudy-night' }, { icon: 'moon' }, { icon: 'star' },
+    { icon: 'planet' }, { icon: 'color-wand' }, { icon: 'flash' }, { icon: 'diamond' },
   ],
   retro: [
     { icon: 'tv' }, { icon: 'radio' }, { icon: 'camera' }, { icon: 'videocam' },
@@ -76,6 +93,8 @@ export const THEME_MOODS: Record<string, { icon: string }[]> = {
     { icon: 'film' }, { icon: 'key' }, { icon: 'mail' }, { icon: 'map' },
     { icon: 'compass' }, { icon: 'bookmark' }, { icon: 'flag' }, { icon: 'ticket' },
     { icon: 'ribbon' }, { icon: 'gift' }, { icon: 'aperture' }, { icon: 'telescope' },
+    { icon: 'flash' }, { icon: 'disc' }, { icon: 'flame' }, { icon: 'star' },
+    { icon: 'planet' }, { icon: 'color-wand' }, { icon: 'leaf' }, { icon: 'sparkles' },
   ],
   minimal: [
     { icon: 'square' }, { icon: 'ellipse' }, { icon: 'triangle' }, { icon: 'star' },
@@ -84,5 +103,7 @@ export const THEME_MOODS: Record<string, { icon: string }[]> = {
     { icon: 'checkmark' }, { icon: 'arrow-up' }, { icon: 'arrow-down' }, { icon: 'arrow-forward' },
     { icon: 'refresh' }, { icon: 'sync' }, { icon: 'share' }, { icon: 'expand' },
     { icon: 'funnel' }, { icon: 'swap-horizontal' }, { icon: 'options' }, { icon: 'grid' },
+    { icon: 'diamond' }, { icon: 'key' }, { icon: 'flash' }, { icon: 'flag' },
+    { icon: 'planet' }, { icon: 'leaf' }, { icon: 'snow' }, { icon: 'cloudy-night' },
   ],
 };

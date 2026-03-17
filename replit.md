@@ -31,6 +31,14 @@ EXPO_NO_TELEMETRY=1 npx expo start --web --port 5000
 ```
 The app is served on port 5000 via Metro bundler.
 
+## Features
+- **Mood Tracking**: 32 mood colors across 3+ rows with German names and themed icons (6 icon themes)
+- **Collaborative Mosaic**: Real-time shared pixel canvas with optimistic UI and rollback on failure
+- **Disco Mode**: Synchronized color cycling at 400ms intervals across all screens
+- **Mood Streak**: Tracks consecutive daily mood logging; shows milestone badges (3/7/14 days) and confetti animation
+- **Pixel Rain Easter Egg**: Long-press the header title in the global mosaic view for a pixel rain animation
+- **Games & Social**: Mini-games and social interaction tabs
+
 ## Deployment
 Configured as a static export:
 - Build: `npx expo export --platform web`

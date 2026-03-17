@@ -158,6 +158,23 @@ export async function safeDbUpsertPixel(x: number, y: number, color: string, use
   }
 }
 
+export async function safeDbDeletePixel(x: number, y: number) {
+  try {
+    const db = blink?.db as any;
+    if (!db) return null;
+    const table = db.globalMosaic || db.global_mosaic;
+    if (!table) return null;
+    const id = `${x}_${y}`;
+    if (typeof table.delete === 'function') {
+      return await table.delete(id);
+    }
+    return null;
+  } catch (err: any) {
+    console.warn(`[MONSAIK] Pixel delete failed:`, err?.message || err);
+    return null;
+  }
+}
+
 export async function safeDbGetGlobalMosaic() {
   try {
     const db = blink?.db as any;

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
 import { Svg, Rect } from 'react-native-svg';
 import { colors, spacing, typography, borderRadius } from '@/constants/design';
-import { safeDbUpsertPixel, safeDbGetGlobalMosaic, safeDbUpdateUserPixels, safeDbGet } from '@/lib/api';
+import { safeDbUpsertPixel, safeDbGetGlobalMosaic, safeDbUpdateUserPixels, safeDbGet, safeDbDeletePixel } from '@/lib/api';
 import { blink } from '@/lib/blink';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -135,6 +135,7 @@ export function CollaborativeMosaic() {
     const currentKey = `${x}_${y}`;
     if (pixels[currentKey] === selectedColor) return;
 
+    const previousColor = pixels[currentKey];
     setPixels(prev => ({ ...prev, [currentKey]: selectedColor }));
     setUserPixels(prev => prev - 1);
 
@@ -142,15 +143,39 @@ export function CollaborativeMosaic() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
 
-    await Promise.all([
-      safeDbUpsertPixel(x, y, selectedColor, 'current_user'),
-      safeDbUpdateUserPixels('current_user', -1)
-    ]);
+    try {
+      const pixelResult = await safeDbUpsertPixel(x, y, selectedColor, 'current_user');
+      if (pixelResult === null || pixelResult === undefined) {
+        throw new Error('Pixel upsert returned null');
+      }
 
-    queryClient.invalidateQueries({ queryKey: ['users', 'current_user'] });
+      const balanceResult = await safeDbUpdateUserPixels('current_user', -1);
+      if (balanceResult === null || balanceResult === undefined) {
+        if (previousColor) {
+          await safeDbUpsertPixel(x, y, previousColor, 'current_user');
+        } else {
+          await safeDbDeletePixel(x, y);
+        }
+        throw new Error('Balance update returned null');
+      }
 
-    if (channelRef.current) {
-      channelRef.current.publish('pixel_update', { x, y, color: selectedColor }, { userId: 'current_user' });
+      queryClient.invalidateQueries({ queryKey: ['users', 'current_user'] });
+
+      if (channelRef.current) {
+        channelRef.current.publish('pixel_update', { x, y, color: selectedColor }, { userId: 'current_user' });
+      }
+    } catch (err) {
+      setPixels(prev => {
+        const next = { ...prev };
+        if (previousColor) {
+          next[currentKey] = previousColor;
+        } else {
+          delete next[currentKey];
+        }
+        return next;
+      });
+      setUserPixels(prev => prev + 1);
+      console.warn('[MONSAIK] Pixel placement failed, rolled back:', err);
     }
   }, [pixelSize, userPixels, selectedColor, pixels, queryClient]);
 

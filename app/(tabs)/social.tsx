@@ -29,7 +29,7 @@ export default function SocialScreen() {
     if (!isDiscoEnabled) return;
     const interval = setInterval(() => {
       setDiscoTick(prev => (prev + 1) % DISCO_COLORS.length);
-    }, 300);
+    }, 400);
     return () => clearInterval(interval);
   }, [isDiscoEnabled]);
 

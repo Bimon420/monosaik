@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator, Animated as RNAnimated, Dimensions } from 'react-native';
 import { Container, Button } from '@/components/ui';
 import { colors, spacing, typography, shadows } from '@/constants/design';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +14,10 @@ import { useDiscoStore } from '@/lib/store';
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
 const ITEM_SIZE = 80;
 const CIRCLE_SIZE = 60;
+const CONFETTI_COUNT = 24;
+const CONFETTI_COLORS = ['#FFD700', '#FF4500', '#40E0D0', '#FF1493', '#8A2BE2', '#ADFF2F', '#00CED1', '#FF8C00'];
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 function isDark(hex: string): boolean {
   const h = hex.replace('#', '');
@@ -24,10 +28,131 @@ function isDark(hex: string): boolean {
   return 0.299 * r + 0.587 * g + 0.114 * b < 140;
 }
 
+function calculateStreak(moods: any[], includeToday: boolean = true): number {
+  if (!moods || moods.length === 0) return 0;
+  const dates = new Set(moods.filter(m => m.date).map(m => m.date));
+  if (dates.size === 0) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let streak = 0;
+  let checkDate = new Date(today);
+
+  if (!includeToday) {
+    checkDate.setDate(checkDate.getDate() - 1);
+  }
+
+  for (let i = 0; i < 365; i++) {
+    const dateStr = checkDate.toISOString().split('T')[0];
+    if (dates.has(dateStr)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+function getStreakMilestone(streak: number): string | null {
+  if (streak >= 14) return `${streak} Tage 🔥🔥🔥`;
+  if (streak >= 7) return `${streak} Tage 🔥🔥`;
+  if (streak >= 3) return `${streak} Tage 🔥`;
+  return null;
+}
+
+function ConfettiAnimation({ onComplete }: { onComplete: () => void }) {
+  const particles = useRef(
+    Array.from({ length: CONFETTI_COUNT }, () => ({
+      animY: new RNAnimated.Value(0),
+      animX: new RNAnimated.Value(0),
+      animOpacity: new RNAnimated.Value(1),
+      startX: Math.random() * SCREEN_WIDTH,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      size: 6 + Math.random() * 8,
+      drift: (Math.random() - 0.5) * 120,
+    }))
+  ).current;
+
+  useEffect(() => {
+    let mounted = true;
+    const animations = particles.map((p, i) => {
+      const delay = i * 30;
+      return RNAnimated.sequence([
+        RNAnimated.delay(delay),
+        RNAnimated.parallel([
+          RNAnimated.timing(p.animY, {
+            toValue: 1,
+            duration: 1200 + Math.random() * 600,
+            useNativeDriver: true,
+          }),
+          RNAnimated.timing(p.animX, {
+            toValue: 1,
+            duration: 1200 + Math.random() * 600,
+            useNativeDriver: true,
+          }),
+          RNAnimated.timing(p.animOpacity, {
+            toValue: 0,
+            duration: 1400 + Math.random() * 400,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]);
+    });
+
+    const composite = RNAnimated.parallel(animations);
+    composite.start(() => {
+      if (mounted) onComplete();
+    });
+
+    return () => {
+      mounted = false;
+      composite.stop();
+    };
+  }, []);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {particles.map((p, i) => (
+        <RNAnimated.View
+          key={i}
+          style={{
+            position: 'absolute',
+            left: p.startX,
+            top: SCREEN_HEIGHT * 0.3,
+            width: p.size,
+            height: p.size,
+            borderRadius: p.size / 2,
+            backgroundColor: p.color,
+            opacity: p.animOpacity,
+            transform: [
+              {
+                translateY: p.animY.interpolate({
+                  inputRange: [0, 0.3, 1],
+                  outputRange: [0, -180, SCREEN_HEIGHT * 0.5],
+                }),
+              },
+              {
+                translateX: p.animX.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, p.drift],
+                }),
+              },
+            ],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 export default function DailyMoodScreen() {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [rewardEarned, setRewardEarned] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [currentStreak, setCurrentStreak] = useState(0);
   const [discoTick, setDiscoTick] = useState(0);
   const queryClient = useQueryClient();
   const { t } = useI18n();
@@ -38,7 +163,7 @@ export default function DailyMoodScreen() {
     if (!isDiscoEnabled) return;
     const interval = setInterval(() => {
       setDiscoTick(prev => (prev + 1) % DISCO_COLORS.length);
-    }, 300);
+    }, 400);
     return () => clearInterval(interval);
   }, [isDiscoEnabled]);
 
@@ -57,6 +182,21 @@ export default function DailyMoodScreen() {
       return results[0] || null;
     }
   });
+
+  const { data: recentMoods } = useQuery({
+    queryKey: ['moods', 'streak'],
+    queryFn: async () => {
+      return await safeDbList('moods', {
+        where: { userId: 'current_user' },
+        orderBy: { date: 'desc' },
+        limit: 30,
+      });
+    },
+  });
+
+  const streak = useMemo(() => calculateStreak(recentMoods || []), [recentMoods]);
+  const streakEndingYesterday = useMemo(() => calculateStreak(recentMoods || [], false), [recentMoods]);
+  const streakMilestone = useMemo(() => getStreakMilestone(streak), [streak]);
 
   const { data: userData } = useQuery({
     queryKey: ['users', 'current_user'],
@@ -93,6 +233,11 @@ export default function DailyMoodScreen() {
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
+      if (data.isFirstTime && streakEndingYesterday > 0) {
+        const newStreak = streakEndingYesterday + 1;
+        setCurrentStreak(newStreak);
+        setShowConfetti(true);
+      }
     },
   });
 
@@ -126,8 +271,11 @@ export default function DailyMoodScreen() {
     const iconName = themeIcons[moodIndex]?.icon || 'checkmark';
     const circleColor = isDiscoEnabled ? getDiscoColor(0) : (selectedMood || colors.primary);
     const iconColor = isDiscoEnabled ? '#FFF' : (selectedMood && isDark(selectedMood) ? '#FFF' : '#000');
+    const displayStreak = currentStreak > 0 ? currentStreak : streak;
+    const displayMilestone = getStreakMilestone(displayStreak);
     return (
       <Container safeArea edges={['top']} style={styles.container}>
+        {showConfetti && <ConfettiAnimation onComplete={() => setShowConfetti(false)} />}
         <View style={styles.discoRow}>
           <Pressable onPress={toggleDisco} style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}>
             <Ionicons name={isDiscoEnabled ? "musical-notes" : "disc-outline"} size={22} color={isDiscoEnabled ? "#FFF" : colors.primary} />
@@ -143,8 +291,13 @@ export default function DailyMoodScreen() {
           <Animated.Text entering={FadeInDown.delay(300).duration(500)} style={styles.successSubtitle}>
             {mood?.name} {rewardEarned ? `— ${t('daily_reward')}` : `— ${t('daily_no_reward')}`}
           </Animated.Text>
+          {displayMilestone && (
+            <Animated.View entering={FadeInUp.delay(400).duration(500)} style={styles.streakBadge}>
+              <Text style={styles.streakBadgeText}>{displayMilestone}</Text>
+            </Animated.View>
+          )}
           <Animated.View entering={FadeInUp.delay(500)}>
-            <Button variant="outline" onPress={() => { setSubmitted(false); }}>
+            <Button variant="outline" onPress={() => { setSubmitted(false); setShowConfetti(false); setCurrentStreak(0); }}>
               {t('daily_back')}
             </Button>
           </Animated.View>
@@ -164,9 +317,16 @@ export default function DailyMoodScreen() {
             <Text style={styles.title}>{t('daily_title')}</Text>
             <Text style={styles.subtitle}>{t('daily_subtitle')}</Text>
           </Animated.View>
-          <Pressable onPress={toggleDisco} style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}>
-            <Ionicons name={isDiscoEnabled ? "musical-notes" : "disc-outline"} size={22} color={isDiscoEnabled ? "#FFF" : colors.primary} />
-          </Pressable>
+          <View style={styles.titleRight}>
+            {streakMilestone && (
+              <View style={styles.streakPill}>
+                <Text style={styles.streakPillText}>{streakMilestone}</Text>
+              </View>
+            )}
+            <Pressable onPress={toggleDisco} style={[styles.discoButton, isDiscoEnabled && styles.discoButtonActive]}>
+              <Ionicons name={isDiscoEnabled ? "musical-notes" : "disc-outline"} size={22} color={isDiscoEnabled ? "#FFF" : colors.primary} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.gridContainer}>
@@ -242,6 +402,10 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     flex: 1,
+  },
+  titleRight: {
+    alignItems: 'flex-end',
+    gap: spacing.xs,
   },
   discoRow: {
     flexDirection: 'row',
@@ -347,7 +511,32 @@ const styles = StyleSheet.create({
   successSubtitle: {
     ...typography.body,
     color: colors.textMuted,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
     textAlign: 'center',
+  },
+  streakBadge: {
+    backgroundColor: '#FF8C00',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 20,
+    marginBottom: spacing.md,
+  },
+  streakBadgeText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  streakPill: {
+    backgroundColor: 'rgba(255, 140, 0, 0.15)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 140, 0, 0.3)',
+  },
+  streakPillText: {
+    color: '#FF8C00',
+    fontWeight: '700',
+    fontSize: 11,
   },
 });

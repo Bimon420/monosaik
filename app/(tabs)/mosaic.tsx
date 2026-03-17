@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Dimensions, ActivityIndicator, Pressable } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, Dimensions, ActivityIndicator, Pressable, Animated as RNAnimated } from 'react-native';
 import { Container } from '@/components/ui';
 import { colors, spacing, typography, borderRadius } from '@/constants/design';
 import { safeDbList } from '@/lib/api';
@@ -10,16 +10,95 @@ import { useI18n } from '@/lib/i18n';
 import { useDiscoStore } from '@/lib/store';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 const PERSONAL_GRID_COLS = 7;
 const PERSONAL_TILE_SIZE = (SCREEN_WIDTH - spacing.lg * 2 - spacing.sm * 6) / PERSONAL_GRID_COLS;
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+const RAIN_DROP_COUNT = 30;
+const RAIN_COLORS = ['#FFD700', '#40E0D0', '#FF4500', '#4169E1', '#8A2BE2', '#FF1493', '#ADFF2F', '#00CED1', '#FF8C00'];
+
+function PixelRainAnimation({ onComplete }: { onComplete: () => void }) {
+  const drops = useRef(
+    Array.from({ length: RAIN_DROP_COUNT }, () => ({
+      animY: new RNAnimated.Value(0),
+      animOpacity: new RNAnimated.Value(1),
+      x: Math.random() * (SCREEN_WIDTH - 40),
+      color: RAIN_COLORS[Math.floor(Math.random() * RAIN_COLORS.length)],
+      size: 8 + Math.random() * 12,
+      delay: Math.random() * 1500,
+      duration: 1200 + Math.random() * 1000,
+    }))
+  ).current;
+
+  useEffect(() => {
+    let mounted = true;
+    const animations = drops.map((d) =>
+      RNAnimated.sequence([
+        RNAnimated.delay(d.delay),
+        RNAnimated.parallel([
+          RNAnimated.timing(d.animY, {
+            toValue: 1,
+            duration: d.duration,
+            useNativeDriver: true,
+          }),
+          RNAnimated.sequence([
+            RNAnimated.delay(d.duration * 0.7),
+            RNAnimated.timing(d.animOpacity, {
+              toValue: 0,
+              duration: d.duration * 0.3,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]),
+      ])
+    );
+
+    const composite = RNAnimated.parallel(animations);
+    composite.start(() => {
+      if (mounted) onComplete();
+    });
+
+    return () => {
+      mounted = false;
+      composite.stop();
+    };
+  }, []);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {drops.map((d, i) => (
+        <RNAnimated.View
+          key={i}
+          style={{
+            position: 'absolute',
+            left: d.x,
+            top: -20,
+            width: d.size,
+            height: d.size,
+            borderRadius: 2,
+            backgroundColor: d.color,
+            opacity: d.animOpacity,
+            transform: [
+              {
+                translateY: d.animY.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, SCREEN_HEIGHT * 0.7],
+                }),
+              },
+            ],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
 
 export default function MosaicScreen() {
   const [view, setView] = useState<'personal' | 'global'>('personal');
+  const [showPixelRain, setShowPixelRain] = useState(false);
   const { t } = useI18n();
   const { isDiscoEnabled, toggleDisco } = useDiscoStore();
   
-  // Personal Moods
   const { data: moods = [], isLoading: isLoadingPersonal } = useQuery({
     queryKey: ['moods'],
     queryFn: () => safeDbList('moods', { orderBy: { date: 'desc' }, limit: 100 }),
@@ -32,13 +111,19 @@ export default function MosaicScreen() {
     if (!isDiscoEnabled) return;
     const interval = setInterval(() => {
       setDiscoTick(prev => (prev + 1) % DISCO_COLORS.length);
-    }, 300);
+    }, 400);
     return () => clearInterval(interval);
   }, [isDiscoEnabled]);
 
   const getDiscoColor = (index: number) => {
     if (!isDiscoEnabled) return undefined;
     return DISCO_COLORS[(discoTick + index) % DISCO_COLORS.length];
+  };
+
+  const handleTitleLongPress = () => {
+    if (view === 'global' && !showPixelRain) {
+      setShowPixelRain(true);
+    }
   };
 
   const renderPersonalItem = ({ item, index }: { item: any, index: number }) => {
@@ -50,10 +135,13 @@ export default function MosaicScreen() {
 
   return (
     <Container safeArea edges={['top']} style={styles.container}>
+      {showPixelRain && <PixelRainAnimation onComplete={() => setShowPixelRain(false)} />}
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <View style={styles.titleContainer}>
-            <Text style={styles.title}>{view === 'personal' ? t('mosaic_personal') : t('mosaic_global')}</Text>
+            <Pressable onLongPress={handleTitleLongPress} delayLongPress={800}>
+              <Text style={styles.title}>{view === 'personal' ? t('mosaic_personal') : t('mosaic_global')}</Text>
+            </Pressable>
             <View style={styles.segmentControl}>
               <Pressable 
                 onPress={() => setView('personal')} 
