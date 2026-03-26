@@ -10,6 +10,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MOOD_COLORS } from '@/lib/themes';
 import { useI18n, LANGUAGES } from '@/lib/i18n';
 import { useDiscoStore } from '@/lib/store';
+import { getUserId, isOnboarded, getLocalDisplayName } from '@/lib/user';
+import OnboardingModal from '@/components/OnboardingModal';
 
 const DISCO_COLORS = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
 const ITEM_SIZE = 80;
@@ -219,10 +221,12 @@ export default function DailyMoodScreen() {
   const [currentStreak, setCurrentStreak] = useState(0);
   const [discoTick, setDiscoTick] = useState(0);
   const [showOptions, setShowOptions] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(!isOnboarded());
   const queryClient = useQueryClient();
   const { t } = useI18n();
   const { isDiscoEnabled } = useDiscoStore();
   const today = new Date().toISOString().split('T')[0];
+  const userId = getUserId();
 
   useEffect(() => {
     if (!isDiscoEnabled) return;
@@ -238,25 +242,27 @@ export default function DailyMoodScreen() {
   }, [isDiscoEnabled, discoTick]);
 
   const { data: todayMood, isLoading: isLoadingToday } = useQuery({
-    queryKey: ['moods', 'today'],
+    queryKey: ['moods', 'today', userId],
     queryFn: async () => {
       const results = await safeDbList('moods', {
-        where: { userId: 'current_user', date: today },
+        where: { userId, date: today },
         limit: 1
       });
       return results[0] || null;
-    }
+    },
+    enabled: !showOnboarding,
   });
 
   const { data: recentMoods } = useQuery({
-    queryKey: ['moods', 'streak'],
+    queryKey: ['moods', 'streak', userId],
     queryFn: async () => {
       return await safeDbList('moods', {
-        where: { userId: 'current_user' },
+        where: { userId },
         orderBy: { date: 'desc' },
         limit: 30,
       });
     },
+    enabled: !showOnboarding,
   });
 
   const streak = useMemo(() => calculateStreak(recentMoods || []), [recentMoods]);
@@ -276,8 +282,8 @@ export default function DailyMoodScreen() {
       if (todayMood) {
         result = await safeDbUpdate('moods', todayMood.id, { color: mood.color, moodName: mood.name });
       } else {
-        result = await safeDbCreate('moods', { color: mood.color, moodName: mood.name, date: today, userId: 'current_user' });
-        await safeDbUpdateUserPixels('current_user', 10);
+        result = await safeDbCreate('moods', { color: mood.color, moodName: mood.name, date: today, userId });
+        await safeDbUpdateUserPixels(userId, 10);
       }
       if (!result) throw new Error('Failed to save mood');
       return { result, isFirstTime };
@@ -286,7 +292,7 @@ export default function DailyMoodScreen() {
       setRewardEarned(data.isFirstTime);
       setSubmitted(true);
       queryClient.invalidateQueries({ queryKey: ['moods'] });
-      queryClient.invalidateQueries({ queryKey: ['users', 'current_user'] });
+      queryClient.invalidateQueries({ queryKey: ['users', userId] });
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
@@ -311,6 +317,18 @@ export default function DailyMoodScreen() {
       if (mood) mutation.mutate(mood);
     }
   };
+
+  if (showOnboarding) {
+    return (
+      <OnboardingModal
+        visible
+        onComplete={(name) => {
+          setShowOnboarding(false);
+          queryClient.invalidateQueries({ queryKey: ['users'] });
+        }}
+      />
+    );
+  }
 
   if (isLoadingToday) {
     return (

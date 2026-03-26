@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown, FadeInUp, useSharedValue, useAnimatedStyle, withSpring, withSequence } from 'react-native-reanimated';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { safeDbUpdateUserPixels } from '@/lib/api';
+import { getUserId } from '@/lib/user';
 import { MOOD_COLORS } from '@/lib/themes';
 
 type GameId = 'pixel_match' | 'color_flash' | 'pixel_hunt' | 'farbsequenz' | 'farb_mix' | 'stroop' | 'farb_gedachtnis';
@@ -63,8 +64,8 @@ const STROOP_TARGET = 5;
 function useRewardMutation(reward: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => safeDbUpdateUserPixels('current_user', reward),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users', 'current_user'] }),
+    mutationFn: () => safeDbUpdateUserPixels(getUserId(), reward),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['users', getUserId()] }),
   });
 }
 

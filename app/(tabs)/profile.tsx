@@ -1,12 +1,13 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, Platform, Alert } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, ActivityIndicator, Share, Platform, Alert } from 'react-native';
 import { Container, Avatar, Card, Button } from '@/components/ui';
 import { colors, spacing, typography, borderRadius, shadows } from '@/constants/design';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { safeDbList, safeDbCount } from '@/lib/api';
+import { safeDbList, safeDbCount, safeDbUpdate } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { getUserId, setLocalDisplayName, ensureUserInDb, clearAllLocalData } from '@/lib/user';
 
 // ─── Streak helpers (same logic as daily screen) ──────────────────────────────
 function calculateStreak(moods: any[]): number {
@@ -42,37 +43,49 @@ function clearLocalData() {
 export default function ProfileScreen() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
+  const userId = getUserId();
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
 
   const { data: userData, isLoading: isLoadingUser } = useQuery({
-    queryKey: ['users', 'current_user'],
+    queryKey: ['users', userId],
     queryFn: async () => {
-      const results = await safeDbList('users', { where: { id: 'current_user' }, limit: 1 });
+      const results = await safeDbList('users', { where: { id: userId }, limit: 1 });
       return results[0] || null;
     },
   });
 
   const { data: moodCount = 0 } = useQuery({
-    queryKey: ['moods', 'count'],
-    queryFn: () => safeDbCount('moods', { where: { userId: 'current_user' } }),
+    queryKey: ['moods', 'count', userId],
+    queryFn: () => safeDbCount('moods', { where: { userId } }),
   });
 
   const { data: recentMoods = [] } = useQuery({
-    queryKey: ['moods', 'streak'],
+    queryKey: ['moods', 'streak', userId],
     queryFn: () => safeDbList('moods', {
-      where: { userId: 'current_user' },
+      where: { userId },
       orderBy: { date: 'desc' },
       limit: 30,
     }),
   });
 
+  const handleSaveName = async () => {
+    const trimmed = nameInput.trim();
+    if (trimmed.length < 2) return;
+    setLocalDisplayName(trimmed);
+    await ensureUserInDb(userId, trimmed);
+    queryClient.invalidateQueries({ queryKey: ['users', userId] });
+    setEditingName(false);
+  };
+
   const streak = useMemo(() => calculateStreak(recentMoods), [recentMoods]);
 
   const user = {
     displayName: userData?.displayName || 'Pixel Master',
-    username: userData?.username || '@pixel_pro',
+    username: userData?.username || `@user_${userId.slice(0, 6)}`,
     pixels: userData?.pixelBalance ?? 0,
     checkIns: moodCount,
-    avatarUrl: userData?.avatarUrl || 'https://api.dicebear.com/7.x/pixel-art/svg?seed=PixelMaster',
+    avatarUrl: userData?.avatarUrl || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${userId}`,
   };
 
   const handleInvite = async () => {
@@ -85,15 +98,15 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      'Abmelden',
-      'Möchtest du deine lokalen Daten zurücksetzen?',
+      'Zurücksetzen',
+      'Alle lokalen Daten löschen und neu starten?',
       [
         { text: 'Abbrechen', style: 'cancel' },
         {
           text: 'Zurücksetzen',
           style: 'destructive',
           onPress: () => {
-            clearLocalData();
+            clearAllLocalData();
             queryClient.clear();
           },
         },
@@ -118,7 +131,35 @@ export default function ProfileScreen() {
         {/* ── Avatar + name ── */}
         <Animated.View entering={FadeInDown.duration(500)} style={styles.header}>
           <Avatar source={{ uri: user.avatarUrl }} size="xl" />
-          <Text style={styles.name}>{user.displayName}</Text>
+          {editingName ? (
+            <View style={styles.nameEditRow}>
+              <TextInput
+                style={styles.nameInput}
+                value={nameInput}
+                onChangeText={setNameInput}
+                maxLength={24}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleSaveName}
+                placeholder="Dein Name"
+                placeholderTextColor={colors.textMuted}
+              />
+              <Pressable style={styles.nameEditBtn} onPress={handleSaveName}>
+                <Ionicons name="checkmark" size={18} color="#FFF" />
+              </Pressable>
+              <Pressable style={styles.nameEditBtnCancel} onPress={() => setEditingName(false)}>
+                <Ionicons name="close" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.nameRow}
+              onPress={() => { setNameInput(user.displayName); setEditingName(true); }}
+            >
+              <Text style={styles.name}>{user.displayName}</Text>
+              <Ionicons name="pencil" size={14} color={colors.textMuted} style={{ marginLeft: 6, marginTop: 4 }} />
+            </Pressable>
+          )}
           <Text style={styles.username}>{user.username}</Text>
         </Animated.View>
 
@@ -188,8 +229,24 @@ const styles = StyleSheet.create({
   scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxxl },
 
   header: { alignItems: 'center', marginBottom: spacing.xl },
-  name: { ...typography.h1, color: colors.text, marginTop: spacing.md },
-  username: { ...typography.body, color: colors.textMuted },
+  nameRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.md },
+  name: { ...typography.h1, color: colors.text },
+  nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.md, width: '100%' },
+  nameInput: {
+    flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.lg,
+    paddingVertical: 8, paddingHorizontal: spacing.md,
+    color: colors.text, fontSize: 18, fontWeight: '700',
+    borderWidth: 1, borderColor: colors.primary,
+  },
+  nameEditBtn: {
+    width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primary,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  nameEditBtnCancel: {
+    width: 36, height: 36, borderRadius: 10, backgroundColor: colors.surface,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  username: { ...typography.body, color: colors.textMuted, marginTop: 2 },
 
   statsGrid: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
   statCard: { flex: 1, alignItems: 'center', padding: spacing.md, gap: 4 },

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Platf
 import { Svg, Rect } from 'react-native-svg';
 import { colors, spacing, typography, borderRadius } from '@/constants/design';
 import { safeDbUpdateUserPixels, safeDbGet } from '@/lib/api';
+import { getUserId } from '@/lib/user';
 import { blink } from '@/lib/blink';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -122,7 +123,7 @@ export function CollaborativeMosaic() {
 
       // Load pixel balance: prefer DB, fall back to localStorage, then default 50
       try {
-        const userRes = await safeDbGet('users', 'current_user');
+        const userRes = await safeDbGet('users', getUserId());
         const dbBalance = (userRes as any)?.pixelBalance;
         if (typeof dbBalance === 'number') {
           setUserPixels(dbBalance);
@@ -147,7 +148,8 @@ export function CollaborativeMosaic() {
         if (!blink?.realtime || typeof blink.realtime.channel !== 'function') return;
         const channel = blink.realtime.channel('global-mosaic');
         channelRef.current = channel;
-        await channel.subscribe({ userId: 'current_user' });
+        const userId = getUserId();
+        await channel.subscribe({ userId });
 
         channel.onMessage((msg: any) => {
           if (msg.type === 'pixel_update') {
@@ -166,7 +168,7 @@ export function CollaborativeMosaic() {
               channelRef.current.publish(
                 'canvas_snapshot',
                 { pixels: snapshot },
-                { userId: 'current_user' }
+                { userId: getUserId() }
               );
             }
           } else if (msg.type === 'canvas_snapshot') {
@@ -186,7 +188,7 @@ export function CollaborativeMosaic() {
         const stored = loadCanvas();
         if (Object.keys(stored).length === 0) {
           setTimeout(() => {
-            channelRef.current?.publish('request_canvas', {}, { userId: 'current_user' });
+            channelRef.current?.publish('request_canvas', {}, { userId: getUserId() });
           }, 500);
         }
       } catch (err) {
@@ -241,16 +243,17 @@ export function CollaborativeMosaic() {
     saveLocalBalance(newBalance);
 
     // Broadcast to other peers
+    const uid = getUserId();
     channelRef.current?.publish(
       'pixel_update',
       { x, y, color: selectedColor },
-      { userId: 'current_user' }
+      { userId: uid }
     );
 
     // Deduct from DB balance (best-effort, no rollback if it fails)
-    safeDbUpdateUserPixels('current_user', -1).then(result => {
+    safeDbUpdateUserPixels(uid, -1).then(result => {
       if (result !== null) {
-        queryClient.invalidateQueries({ queryKey: ['users', 'current_user'] });
+        queryClient.invalidateQueries({ queryKey: ['users', uid] });
       }
     });
   }, [pixelSize, userPixels, selectedColor, pixels, queryClient]);
