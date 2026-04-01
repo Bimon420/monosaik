@@ -1,17 +1,12 @@
-import { Platform } from 'react-native';
-import { safeDbList, safeDbCreate, safeDbUpdate } from './api';
+import { safeDbList } from './api';
+import { storageGetItem, storageSetItem } from './storage';
 
 const FRIENDS_KEY = 'monsaik_friends_v1';
-
-function storage() {
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') return localStorage;
-  return null;
-}
 
 // ─── Local friend list (list of user IDs) ─────────────────────────────────────
 export function getLocalFriends(): string[] {
   try {
-    const raw = storage()?.getItem(FRIENDS_KEY);
+    const raw = storageGetItem(FRIENDS_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -22,13 +17,13 @@ export function addLocalFriend(userId: string): string[] {
   const current = getLocalFriends();
   if (current.includes(userId)) return current;
   const updated = [...current, userId];
-  storage()?.setItem(FRIENDS_KEY, JSON.stringify(updated));
+  storageSetItem(FRIENDS_KEY, JSON.stringify(updated));
   return updated;
 }
 
 export function removeLocalFriend(userId: string): string[] {
   const updated = getLocalFriends().filter(id => id !== userId);
-  storage()?.setItem(FRIENDS_KEY, JSON.stringify(updated));
+  storageSetItem(FRIENDS_KEY, JSON.stringify(updated));
   return updated;
 }
 

@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   codeInput: {
     flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.lg,
     paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
-    color: colors.text, fontSize: 15, fontWeight: '700',
+    color: colors.text, fontSize: 16, fontWeight: '700',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', letterSpacing: 1.5,
   },
   searchBtn: {

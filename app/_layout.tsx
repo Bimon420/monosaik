@@ -1,14 +1,17 @@
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { View, ActivityIndicator } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { hydrateStorage } from '@/lib/storage';
+import { colors } from '@/constants/design';
 
-// Create a client for React Query
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
+      staleTime: 1000 * 60 * 5,
       retry: 2,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
       throwOnError: false,
@@ -23,6 +26,19 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   useFrameworkReady();
+  const [storageReady, setStorageReady] = useState(false);
+
+  useEffect(() => {
+    hydrateStorage().then(() => setStorageReady(true));
+  }, []);
+
+  if (!storageReady) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <ErrorBoundary>

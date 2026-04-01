@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator, Animated as RNAnimated, Dimensions, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, ActivityIndicator, Animated as RNAnimated, useWindowDimensions, Modal } from 'react-native';
 import { Container, Button } from '@/components/ui';
 import { colors, spacing, typography, shadows, borderRadius } from '@/constants/design';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,8 +18,6 @@ const ITEM_SIZE = 80;
 const CIRCLE_SIZE = 60;
 const CONFETTI_COUNT = 24;
 const CONFETTI_COLORS = ['#FFD700', '#FF4500', '#40E0D0', '#FF1493', '#8A2BE2', '#ADFF2F', '#00CED1', '#FF8C00'];
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const SCREEN_WIDTH = Dimensions.get('window').width;
 
 function isDark(hex: string): boolean {
   const h = hex.replace('#', '');
@@ -65,6 +63,7 @@ function getStreakMilestone(streak: number): string | null {
 }
 
 function ConfettiAnimation({ onComplete }: { onComplete: () => void }) {
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const particles = useRef(
     Array.from({ length: CONFETTI_COUNT }, () => ({
       animY: new RNAnimated.Value(0),

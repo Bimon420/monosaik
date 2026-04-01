@@ -1,11 +1,11 @@
-import { Platform } from 'react-native';
 import { safeDbList, safeDbCreate, safeDbUpdate } from './api';
+import { storageGetItem, storageSetItem, storageRemoveItem } from './storage';
 
 const USER_ID_KEY = 'monsaik_user_id';
 const USER_NAME_KEY = 'monsaik_display_name';
 const ONBOARDED_KEY = 'monsaik_onboarded';
 
-// ─── UUID v4 generator (works without crypto.randomUUID on older browsers) ────
+// ─── UUID v4 generator ────────────────────────────────────────────────────────
 function generateUUID(): string {
   try {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -19,38 +19,31 @@ function generateUUID(): string {
   });
 }
 
-function storage() {
-  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') return localStorage;
-  return null;
-}
-
 // ─── Get or create a stable user ID for this device ──────────────────────────
 export function getUserId(): string {
-  const ls = storage();
-  if (!ls) return 'current_user'; // native fallback
-  let id = ls.getItem(USER_ID_KEY);
+  let id = storageGetItem(USER_ID_KEY);
   if (!id) {
     id = generateUUID();
-    ls.setItem(USER_ID_KEY, id);
+    storageSetItem(USER_ID_KEY, id);
   }
   return id;
 }
 
 // ─── Display name helpers ─────────────────────────────────────────────────────
 export function getLocalDisplayName(): string | null {
-  return storage()?.getItem(USER_NAME_KEY) || null;
+  return storageGetItem(USER_NAME_KEY);
 }
 
 export function setLocalDisplayName(name: string) {
-  storage()?.setItem(USER_NAME_KEY, name);
+  storageSetItem(USER_NAME_KEY, name);
 }
 
 export function isOnboarded(): boolean {
-  return storage()?.getItem(ONBOARDED_KEY) === '1';
+  return storageGetItem(ONBOARDED_KEY) === '1';
 }
 
 export function markOnboarded() {
-  storage()?.setItem(ONBOARDED_KEY, '1');
+  storageSetItem(ONBOARDED_KEY, '1');
 }
 
 // ─── Ensure user exists in Blink DB ──────────────────────────────────────────
@@ -79,11 +72,12 @@ export async function ensureUserInDb(userId: string, displayName: string): Promi
 
 // ─── Clear all local data (reset / logout) ───────────────────────────────────
 export function clearAllLocalData() {
-  const ls = storage();
-  if (!ls) return;
-  ls.removeItem(USER_ID_KEY);
-  ls.removeItem(USER_NAME_KEY);
-  ls.removeItem(ONBOARDED_KEY);
-  ls.removeItem('monsaik_canvas_v1');
-  ls.removeItem('monsaik_balance_v1');
+  storageRemoveItem(USER_ID_KEY);
+  storageRemoveItem(USER_NAME_KEY);
+  storageRemoveItem(ONBOARDED_KEY);
+  storageRemoveItem('monsaik_canvas_v1');
+  storageRemoveItem('monsaik_balance_v1');
+  storageRemoveItem('monsaik_friends_v1');
+  storageRemoveItem('monsaik_owned_items_v1');
+  storageRemoveItem('monsaik_active_frame');
 }
