@@ -1,7 +1,6 @@
 /**
- * Storage fallback (non-web, non-native platforms).
- * Metro picks storage.web.ts for web and storage.native.ts for iOS/Android —
- * this file is only a safety net and mirrors the web implementation.
+ * Web storage implementation — localStorage only.
+ * Metro resolves this file for web bundles; AsyncStorage never gets included.
  */
 
 function ls(): Storage | null {
@@ -12,7 +11,9 @@ function ls(): Storage | null {
   }
 }
 
-export async function hydrateStorage(): Promise<void> {}
+export async function hydrateStorage(): Promise<void> {
+  // Nothing to hydrate on web — localStorage is synchronous
+}
 
 export function storageGetItem(key: string): string | null {
   return ls()?.getItem(key) ?? null;

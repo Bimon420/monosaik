@@ -27,9 +27,15 @@ A collaborative mood mosaic app built with Expo (React Native) targeting web. Us
 ## Running
 The "Start application" workflow runs:
 ```
-EXPO_NO_TELEMETRY=1 npx expo start --web --port 5000
+EXPO_NO_TELEMETRY=1 npx expo start --web --offline --port 5000
 ```
 The app is served on port 5000 via Metro bundler.
+
+## iOS Safari Compatibility
+Three changes ensure the app works on iOS Safari without a red screen:
+1. **Platform-specific storage files**: `lib/storage.web.ts` (pure localStorage) and `lib/storage.native.ts` (AsyncStorage with cache). Metro resolves `.web.ts` for the web bundle, keeping AsyncStorage out entirely.
+2. **Metro transform override**: `metro.config.js` forces Babel transformation of `react-native-worklets` and `react-native-reanimated` — their compiled ES2022 private class fields (`#field`) are downcompiled to ES2015, which iOS Safari 14 and earlier cannot natively parse.
+3. **`--offline` flag**: Prevents the `CommandError: Input is required` error that appeared in Metro logs when Expo tried to prompt for an account login.
 
 ## Features
 - **Onboarding**: First-time users see a name-entry modal (OnboardingModal.tsx) before accessing the app
