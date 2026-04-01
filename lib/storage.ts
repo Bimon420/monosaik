@@ -1,13 +1,15 @@
 /**
- * Cross-platform storage: localStorage on web, AsyncStorage on native.
- * Synchronous reads from an in-memory cache (populated at boot).
+ * Cross-platform storage:
+ *  - Web  → localStorage (synchronous, always available)
+ *  - Native → AsyncStorage with an in-memory sync cache (hydrated at boot)
+ *
+ * AsyncStorage is required() dynamically so it NEVER gets included in the
+ * web Metro bundle, which avoids the native-module bridge crash on iOS Safari.
  */
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─── In-memory cache for sync reads on native ────────────────────────────────
 const cache: Record<string, string> = {};
-let hydrated = false;
 
 const KEYS = [
   'monsaik_user_id',
@@ -20,50 +22,58 @@ const KEYS = [
   'monsaik_balance_v1',
 ];
 
-/** Call once at app startup (before reading any stored values). */
-export async function hydrateStorage(): Promise<void> {
-  if (Platform.OS === 'web') {
-    hydrated = true;
-    return;
-  }
+function getWebStorage(): Storage | null {
   try {
-    const pairs = await AsyncStorage.multiGet(KEYS);
-    for (const [key, value] of pairs) {
-      if (value !== null) cache[key] = value;
-    }
+    if (Platform.OS === 'web' && typeof localStorage !== 'undefined') return localStorage;
   } catch {}
-  hydrated = true;
-}
-
-function webStorage() {
-  if (typeof localStorage !== 'undefined') return localStorage;
   return null;
 }
 
-/** Synchronous read — works on both web and native (after hydration). */
+/** Call once at app startup (native only — web is synchronous already). */
+export async function hydrateStorage(): Promise<void> {
+  if (Platform.OS === 'web') return; // nothing to hydrate on web
+  try {
+    // Dynamic require keeps AsyncStorage OUT of the web bundle entirely
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const pairs: [string, string | null][] = await AsyncStorage.multiGet(KEYS);
+    for (const [key, value] of pairs) {
+      if (value !== null) cache[key] = value;
+    }
+  } catch (e) {
+    console.warn('[storage] hydrateStorage failed:', e);
+  }
+}
+
+/** Synchronous read. On web uses localStorage; on native reads from cache. */
 export function storageGetItem(key: string): string | null {
   if (Platform.OS === 'web') {
-    return webStorage()?.getItem(key) ?? null;
+    return getWebStorage()?.getItem(key) ?? null;
   }
   return cache[key] ?? null;
 }
 
-/** Synchronous write — instant on web, async on native (fire-and-forget). */
+/** Synchronous write. On web uses localStorage; on native updates cache + async persist. */
 export function storageSetItem(key: string, value: string): void {
   if (Platform.OS === 'web') {
-    webStorage()?.setItem(key, value);
+    getWebStorage()?.setItem(key, value);
     return;
   }
   cache[key] = value;
-  AsyncStorage.setItem(key, value).catch(() => {});
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    AsyncStorage.setItem(key, value).catch(() => {});
+  } catch {}
 }
 
-/** Synchronous remove — instant on web, async on native (fire-and-forget). */
+/** Synchronous remove. On web uses localStorage; on native updates cache + async persist. */
 export function storageRemoveItem(key: string): void {
   if (Platform.OS === 'web') {
-    webStorage()?.removeItem(key);
+    getWebStorage()?.removeItem(key);
     return;
   }
   delete cache[key];
-  AsyncStorage.removeItem(key).catch(() => {});
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    AsyncStorage.removeItem(key).catch(() => {});
+  } catch {}
 }
