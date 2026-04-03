@@ -22,7 +22,20 @@ function createBlinkClient() {
       }
     }
 
-    return createClient(config)
+    const client = createClient(config)
+
+    // The Blink SDK starts async auth initialisation on the web.  If that
+    // promise ever rejects (e.g. when the backend returns an HTML error page
+    // instead of JSON), it would become an unhandled rejection and trigger
+    // Expo's red-screen overlay.  Attach a silent .catch() to prevent that.
+    const authAny = client?.auth as any
+    if (authAny?.initializationPromise?.catch) {
+      authAny.initializationPromise.catch((err: unknown) => {
+        console.warn('[MONSAIK] Blink auth init error (suppressed):', err)
+      })
+    }
+
+    return client
   } catch (e) {
     console.warn('[MONSAIK] Failed to create Blink client:', e)
     // Return a minimal stub so the app doesn't crash
