@@ -38,24 +38,15 @@ export const colors = {
   accentLight: '#FBBF24',
   accentTint: '#FFFBEB',
 
-  // Mood Base Palette — 16 clearly distinguishable colors
+  // Mood Base Palette (Gaming-inspired)
   moods: {
-    wuetend: '#FF2020',         // Wütend
-    energetisch: '#FF8800',     // Energetisch
-    freudig: '#FFD600',         // Freudig
-    frisch: '#AADD00',          // Frisch
-    hoffnungsvoll: '#00BB44',   // Hoffnungsvoll
-    entspannt: '#00DDCC',       // Entspannt
-    friedlich: '#00BBFF',       // Friedlich
-    traurig: '#2244FF',         // Traurig
-    kreativ: '#7700CC',         // Kreativ
-    leidenschaftlich: '#CC00CC',// Leidenschaftlich
-    verliebt: '#FF1177',        // Verliebt
-    zaertlich: '#FF88BB',       // Zärtlich
-    mutig: '#FF6633',           // Mutig
-    geerdet: '#997744',         // Geerdet
-    neutral: '#778899',         // Neutral
-    geheimnisvoll: '#334499',   // Geheimnisvoll
+    joy: '#FFD700', // Gold
+    calm: '#40E0D0', // Turquoise
+    anger: '#FF4500', // OrangeRed
+    sad: '#4169E1', // RoyalBlue
+    energy: '#FF1493', // DeepPink
+    creative: '#8A2BE2', // BlueViolet
+    neutral: '#95A5A6', // Gray
   },
 
   // Base Colors
