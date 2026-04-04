@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Monsaik</title>
+
+    <!--
+      CRITICAL: This script runs BEFORE the JavaScript bundle is parsed.
+      It patches window.fetch and window.addEventListener so that Blink SDK
+      network errors never surface as Expo's red-screen overlay.
+    -->
+    <script>
+      (function () {
+        'use strict';
+
+        /* ── 1. fetch interceptor ───────────────────────────────────────────
+           The Blink SDK may capture a reference to fetch at import-time, so
+           we must patch it here — in the HTML head — before ANY JS bundle runs.
+           When the Replit reverse-proxy returns its "We couldn't reach this app"
+           HTML page instead of JSON we convert it to a 503 JSON response that
+           the SDK handles gracefully. ─────────────────────────────────────── */
+        var _origFetch = window.fetch;
+        var SAFE_BODY = JSON.stringify({ error: 'Service temporarily unavailable', code: 'PROXY_ERROR' });
+        var BLINK_PATTERNS = ['blink.new', 'core.blink', '/api/auth', '/api/db', '/api/analytics', '/api/data'];
+
+        function isBlinkUrl(input) {
+          try {
+            var url = typeof input === 'string' ? input : (input && input.url) ? input.url : String(input);
+            for (var i = 0; i < BLINK_PATTERNS.length; i++) {
+              if (url.indexOf(BLINK_PATTERNS[i]) !== -1) return true;
+            }
+          } catch (e) {}
+          return false;
+        }
+
+        function safeJsonResp() {
+          return new Response(SAFE_BODY, {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: new Headers({ 'content-type': 'application/json' })
+          });
+        }
+
+        window.fetch = function (input, init) {
+          if (!isBlinkUrl(input)) return _origFetch.call(this, input, init);
+          return _origFetch.call(this, input, init).then(function (resp) {
+            var ct = resp.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1 && ct.indexOf('text/event-stream') === -1) {
+              console.warn('[MONSAIK] fetch interceptor: non-JSON from Blink, substituting 503');
+              return safeJsonResp();
+            }
+            return resp;
+          }).catch(function () {
+            console.warn('[MONSAIK] fetch interceptor: network error for Blink, substituting 503');
+            return safeJsonResp();
+          });
+        };
+
+        /* ── 2. unhandledrejection guard ────────────────────────────────────
+           Patch window.addEventListener so every future 'unhandledrejection'
+           listener (including Expo's useRejectionHandler) is wrapped with our
+           Blink-error filter.  Also register an early capture-phase listener
+           that calls stopImmediatePropagation() before anything else fires. ── */
+        var _origAEL = window.addEventListener.bind(window);
+        window.__origAEL = _origAEL;
+
+        function isBlinkError(reason) {
+          var msg = '';
+          try { msg = reason && reason.message ? String(reason.message) : String(reason || ''); } catch(e) {}
+          var stack = '';
+          try { stack = reason && reason.stack ? String(reason.stack) : ''; } catch(e) {}
+
+          if (
+            msg.indexOf('<!DOCTYPE') !== -1 ||
+            msg.indexOf('Network request failed') !== -1 ||
+            msg.indexOf('Failed to fetch') !== -1 ||
+            msg.indexOf("couldn't reach") !== -1 ||
+            msg.indexOf('\u2019t reach') !== -1 ||
+            msg.indexOf('PROXY_ERROR') !== -1 ||
+            msg.indexOf('Service temporarily unavailable') !== -1 ||
+            msg.indexOf('Blink') !== -1 ||
+            msg.indexOf('NetworkError') !== -1 ||
+            stack.indexOf('blink.new') !== -1 ||
+            stack.indexOf('blinkdotnew') !== -1 ||
+            stack.indexOf('BlinkAuth') !== -1 ||
+            stack.indexOf('HttpClient') !== -1
+          ) return true;
+
+          // SyntaxError from JSON.parse on HTML — message varies by browser
+          if (reason instanceof SyntaxError) {
+            // Chrome: "Unexpected token '<'"  Firefox: "Unexpected character"  Safari: "JSON Parse error"
+            if (
+              msg.indexOf('token') !== -1 ||
+              msg.indexOf('character') !== -1 ||
+              msg.indexOf('JSON') !== -1 ||
+              msg.indexOf('DOCTYPE') !== -1
+            ) return true;
+          }
+          return false;
+        }
+
+        // Wrap every future unhandledrejection listener
+        window.addEventListener = function (type, listener, options) {
+          if (type === 'unhandledrejection' && typeof listener === 'function') {
+            var wrapped = function (ev) {
+              if (isBlinkError(ev && ev.reason)) {
+                try { ev.stopImmediatePropagation(); } catch(e) {}
+                try { ev.preventDefault(); } catch(e) {}
+                console.warn('[MONSAIK] Filtered unhandledrejection (wrap)');
+                return;
+              }
+              return listener.call(this, ev);
+            };
+            return _origAEL(type, wrapped, options);
+          }
+          return _origAEL(type, listener, options);
+        };
+
+        // Early capture-phase listener — fires before all bubble-phase listeners
+        _origAEL('unhandledrejection', function (ev) {
+          if (isBlinkError(ev && ev.reason)) {
+            try { ev.stopImmediatePropagation(); } catch(e) {}
+            try { ev.preventDefault(); } catch(e) {}
+            console.warn('[MONSAIK] Suppressed unhandledrejection (early/capture)');
+          }
+        }, true);
+
+        /* ── 3. DOM backstop ───────────────────────────────────────────────
+           If the overlay div #error-overlay somehow appears, and a Blink
+           rejection was seen recently, remove it immediately. ─────────────── */
+        var _lastBlinkMs = 0;
+        _origAEL('unhandledrejection', function (ev) {
+          if (isBlinkError(ev && ev.reason)) _lastBlinkMs = Date.now();
+        }, true);
+
+        function watchForOverlay() {
+          if (typeof MutationObserver === 'undefined' || !document.body) return;
+          new MutationObserver(function (muts) {
+            for (var i = 0; i < muts.length; i++) {
+              var nodes = muts[i].addedNodes;
+              for (var j = 0; j < nodes.length; j++) {
+                var el = nodes[j];
+                if (el && el.id === 'error-overlay') {
+                  if (Date.now() - _lastBlinkMs < 5000) {
+                    console.warn('[MONSAIK] Removing #error-overlay (DOM backstop)');
+                    (function removeOverlay() {
+                      try {
+                        var NLB = require('@expo/metro-runtime/src/error-overlay/modules/NativeLogBox');
+                        if (NLB && NLB.default) { NLB.default.hide(); return; }
+                      } catch(e) {}
+                      var div = document.getElementById('error-overlay');
+                      if (div) div.remove();
+                    })();
+                  }
+                }
+              }
+            }
+          }).observe(document.body, { childList: true });
+        }
+
+        if (document.body) {
+          watchForOverlay();
+        } else {
+          document.addEventListener('DOMContentLoaded', watchForOverlay);
+        }
+      })();
+    </script>
+
+    <!-- The `react-native-web` recommended style reset -->
+    <style id="expo-reset">
+      html, body { height: 100%; }
+      body { overflow: hidden; }
+      #root { display: flex; height: 100%; flex: 1; }
+    </style>
+  </head>
+
+  <body>
+    <noscript>Du musst JavaScript aktivieren, um diese App zu nutzen.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
