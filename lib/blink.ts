@@ -59,29 +59,35 @@ if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.fetc
 }
 
 // ─── SECONDARY GUARD ─────────────────────────────────────────────────────────
-// Belt-and-suspenders: suppress any unhandled rejection from the polyfilled
-// Promise tracker via LogBox, and from the native browser unhandledrejection
-// event. The fetch interceptor above should make these unreachable, but in case
-// any code path is missed, these prevent the red-screen overlay.
+// Belt-and-suspenders: by the time lib/blink.ts is evaluated, app/_layout.tsx
+// has already patched window.addEventListener so ALL future unhandledrejection
+// listeners (including Expo's useRejectionHandler) automatically get the Blink
+// error filter applied.  We register a direct listener here as an extra safety
+// net for any rejection that fires at module-eval time.
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
-  window.addEventListener(
+  // Use the original addEventListener if the layout already patched it
+  const _ael: typeof window.addEventListener =
+    (window as any).__origAEL ?? window.addEventListener.bind(window)
+  _ael.call(window,
     'unhandledrejection',
     (event: PromiseRejectionEvent) => {
       const msg: string = event?.reason?.message ?? String(event?.reason ?? '')
+      const stack: string = event?.reason?.stack ?? ''
       if (
         msg.includes('<!DOCTYPE') ||
-        msg.includes('BlinkNetworkError') ||
-        msg.includes('BlinkAuthError') ||
-        msg.includes('BlinkDataError') ||
-        msg.includes('BlinkValidationError') ||
+        msg.includes('Blink') ||
         msg.includes("couldn't reach") ||
         msg.includes('\u2019t reach') ||
         msg.includes('Network request failed') ||
-        msg.includes('Unexpected response format') ||
         msg.includes('Failed to fetch') ||
-        msg.includes('PROXY_ERROR')
+        msg.includes('Unexpected response format') ||
+        msg.includes('PROXY_ERROR') ||
+        msg.includes('Service temporarily unavailable') ||
+        stack.includes('blinkdotnew') ||
+        stack.includes('BlinkAuth') ||
+        stack.includes('HttpClient')
       ) {
-        console.warn('[MONSAIK] Suppressed unhandled rejection:', msg.slice(0, 120))
+        console.warn('[MONSAIK] Secondary guard suppressed rejection:', msg.slice(0, 120))
         event.stopImmediatePropagation()
         event.preventDefault()
       }
