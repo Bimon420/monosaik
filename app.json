@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "blink-expo-starter",
-    "slug": "blink-expo-starter",
+    "name": "Monsaik",
+    "slug": "monsaik",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "blinkexpo",
+    "scheme": "monsaik",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -43,9 +43,6 @@
     "extra": {
       "router": {
         "origin": false
-      },
-      "eas": {
-        "projectId": "your-project-id-here"
       }
     }
   }
